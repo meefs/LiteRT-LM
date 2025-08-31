@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# [Google-internal load of `cc_library`]
+# [Google-internal load of `cc_test`]
 load("@flatbuffers//:build_defs.bzl", "flatbuffer_cc_library", "flatbuffer_py_library")
 
 package(

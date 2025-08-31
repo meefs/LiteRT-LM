@@ -12,6 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# [Google-internal load of `cc_binary`]
+# [Google-internal load of `cc_library`]
+# [Google-internal load of `cc_test`]
+
 package(
     default_hdrs_check = "strict",
     default_visibility = [
