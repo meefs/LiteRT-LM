@@ -71,37 +71,19 @@ const absl::Duration kWaitUntilDoneTimeout = absl::Minutes(10);
 
 namespace {
 
-void RunBenchmark(const LiteRtLmSettings& settings, litert::lm::Engine* engine,
-                  litert::lm::Engine::Session* session) {
-  const bool is_dummy_input = settings.benchmark_prefill_tokens > 0 ||
-                              settings.benchmark_decode_tokens > 0;
-  std::string input_prompt = settings.input_prompt;
+class LiteRtLmLibObserver : public InferenceObservable {
+ public:
+  explicit LiteRtLmLibObserver(bool is_dummy_io) { is_dummy_io_ = is_dummy_io; }
 
-  std::vector<litert::lm::InputData> inputs;
-  inputs.emplace_back(InputText(input_prompt));
-
-  if (settings.async) {
-    if (is_dummy_input) {
-      ABSL_LOG(FATAL) << "Async mode does not support benchmarking with "
-                         "specified number of prefill or decode tokens. If you "
-                         "want to benchmark the model, please try again with "
-                         "async=false.";
-    }
-    InferenceObservable observable;
-    absl::Status status = session->GenerateContentStream(inputs, &observable);
-    ABSL_CHECK_OK(status);
-    ABSL_CHECK_OK(engine->WaitUntilDone(kWaitUntilDoneTimeout));
-  } else {
-    auto responses = session->GenerateContent(inputs);
-    ABSL_CHECK_OK(responses);
-    if (!is_dummy_input) {
-      ABSL_LOG(INFO) << "Responses: " << *responses;
+  void OnNext(const Responses& responses) override {
+    if (!is_dummy_io_) {
+      std::cout << *responses.GetResponseTextAt(0) << std::flush;
     }
   }
 
-  auto benchmark_info = session->GetBenchmarkInfo();
-  ABSL_LOG(INFO) << *benchmark_info;
-}
+ private:
+  bool is_dummy_io_;
+};
 
 void RunSingleTurn(const LiteRtLmSettings& settings, litert::lm::Engine* engine,
                    litert::lm::Engine::Session* session,
@@ -140,25 +122,36 @@ void RunSingleTurn(const LiteRtLmSettings& settings, litert::lm::Engine* engine,
     ABSL_LOG(FATAL) << "The number of audio is not the same as the number of "
                        "<start_of_audio> tags in the prompt.";
   }
+
+  bool is_dummy_io = settings.benchmark_prefill_tokens > 0 ||
+                     settings.benchmark_decode_tokens > 0;
+  if (is_dummy_io) {
+    ABSL_LOG(INFO) << "Streaming response are not shown because dummy input "
+                      "or output are used.";
+  }
+
   if (settings.async) {
-    InferenceObservable observable;
+    InferenceObservable observable = LiteRtLmLibObserver(is_dummy_io);
     absl::Status status = session->GenerateContentStream(inputs, &observable);
     ABSL_CHECK_OK(status);
     ABSL_CHECK_OK(engine->WaitUntilDone(kWaitUntilDoneTimeout));
   } else {
     auto responses = session->GenerateContent(inputs);
     ABSL_CHECK_OK(responses);
-    ABSL_LOG(INFO) << "Responses: " << *responses;
+    if (!is_dummy_io) {
+      ABSL_LOG(INFO) << "Responses: " << *responses;
+    }
+  }
+
+  if (settings.benchmark) {
+    auto benchmark_info = session->GetBenchmarkInfo();
+    ABSL_LOG(INFO) << *benchmark_info;
   }
 }
 
 void RunMultiTurnConversation(const LiteRtLmSettings& settings,
                               litert::lm::Engine* engine,
                               litert::lm::Engine::Session* session) {
-  if (settings.benchmark) {
-    ABSL_LOG(FATAL) << "Benchmarking with multi-turns input is not supported.";
-  }
-
   std::string input_prompt;
   do {
     std::cout << "Please enter the prompt (or press Enter to end): ";
@@ -279,6 +272,11 @@ absl::Status RunLiteRtLm(const LiteRtLmSettings& settings) {
   }
 
   if (settings.benchmark) {
+    if (settings.multi_turns) {
+      ABSL_LOG(FATAL)
+          << "Benchmarking with multi-turns input is not supported.";
+    }
+
     litert::lm::proto::BenchmarkParams benchmark_params;
     benchmark_params.set_num_prefill_tokens(settings.benchmark_prefill_tokens);
     benchmark_params.set_num_decode_tokens(settings.benchmark_decode_tokens);
@@ -294,9 +292,7 @@ absl::Status RunLiteRtLm(const LiteRtLmSettings& settings) {
       (*engine)->CreateSession(session_config);
   ABSL_CHECK_OK(session) << "Failed to create session";
 
-  if (settings.benchmark) {
-    RunBenchmark(settings, engine->get(), session->get());
-  } else if (settings.multi_turns) {
+  if (settings.multi_turns) {
     RunMultiTurnConversation(settings, engine->get(), session->get());
   } else {
     std::string input_prompt = settings.input_prompt;
