@@ -41,6 +41,10 @@ struct LiteRtLmSettings {
   bool force_f32 = false;
   bool multi_turns = false;
   int num_cpu_threads = 0;
+  // Set no external tensor mode true by default since it runs slightly faster
+  // during decode as the layout changes optimized for GPU inference is done by
+  // GPU, not by CPU.
+  bool gpu_no_external_tensor_mode = true;
   bool clear_kv_cache_before_prefill = false;
   int num_logits_to_print_after_decode = 0;
   std::optional<std::string> score_target_text = std::nullopt;

@@ -76,6 +76,9 @@ struct GpuConfig {
   // means only greedy decoding is supported for any sessions created with
   // this engine.
   uint32_t max_top_k = 1;
+
+  // Whether to use no external tensor mode.
+  bool no_external_tensor_mode = true;
 };
 std::ostream& operator<<(std::ostream& os, const GpuConfig& config);
 

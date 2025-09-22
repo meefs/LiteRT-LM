@@ -743,15 +743,21 @@ LlmLiteRtCompiledModelExecutor::Create(LlmExecutorSettings executor_settings,
         gpu_compilation_options.SetSerializeExternalTensors(true);
       }
       // Use NoExternalTensorsMode to get better performance.
-      gpu_compilation_options.EnableNoExternalTensorsMode(true);
-      // This option prevents KVCache handling from being affected by
-      // BHWC conversion in NoExternalTensorsMode.
-      gpu_compilation_options.AddExternalTensorPattern("kv_cache_");
-      ASSIGN_OR_RETURN(auto sampler_backend,
-                       GetSamplerBackend(executor_settings));
-      if (sampler_backend == Backend::GPU) {
-        // GPU Sampler requires logits to be external tensors (PHWC4 format).
-        gpu_compilation_options.AddExternalTensorPattern("logits");
+      bool no_external_tensor_mode =
+          executor_settings.GetBackendConfig<GpuConfig>()
+              ->no_external_tensor_mode;
+      gpu_compilation_options.EnableNoExternalTensorsMode(
+          no_external_tensor_mode);
+      if (no_external_tensor_mode) {
+        // This option prevents KVCache handling from being affected by
+        // BHWC conversion in NoExternalTensorsMode.
+        gpu_compilation_options.AddExternalTensorPattern("kv_cache_");
+        ASSIGN_OR_RETURN(auto sampler_backend,
+                        GetSamplerBackend(executor_settings));
+        if (sampler_backend == Backend::GPU) {
+          // GPU Sampler requires logits to be external tensors (PHWC4 format).
+          gpu_compilation_options.AddExternalTensorPattern("logits");
+        }
       }
       // TODO b/441627719 - Select backend by runtime options.
 #if defined(LITERT_USE_WEBGPU_ACCELERATOR)

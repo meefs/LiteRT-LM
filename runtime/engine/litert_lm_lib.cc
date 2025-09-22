@@ -242,6 +242,14 @@ absl::Status RunLiteRtLm(const LiteRtLmSettings& settings) {
     cpu_settings.number_of_threads = settings.num_cpu_threads;
     executor_settings.SetBackendConfig(cpu_settings);
   }
+  if (backend == Backend::GPU) {
+    auto& executor_settings = engine_settings.GetMutableMainExecutorSettings();
+    ASSIGN_OR_RETURN(
+        auto gpu_settings,
+        executor_settings.MutableBackendConfig<litert::lm::GpuConfig>());
+    gpu_settings.no_external_tensor_mode = settings.gpu_no_external_tensor_mode;
+    executor_settings.SetBackendConfig(gpu_settings);
+  }
   auto session_config = litert::lm::SessionConfig::CreateDefault();
   auto sampler_backend_str = settings.sampler_backend;
   if (!sampler_backend_str.empty()) {

@@ -71,6 +71,11 @@ ABSL_FLAG(bool, multi_turns, false,
 ABSL_FLAG(int, num_cpu_threads, 0,
           "If greater than 0, the number of CPU threads to use for the LLM "
           "execution with CPU backend.");
+ABSL_FLAG(bool, gpu_no_external_tensor_mode, true,
+          "If true (by default), the GPU backend will use no external tensor "
+          "mode which runs slightly faster during decode. It should be set "
+          "false when GPU backend doesn't support no external tensor mode, "
+          "e.g. Vulkan or OpenGL.");
 ABSL_FLAG(bool, clear_kv_cache_before_prefill, false,
           "If true, clear kv cache before the first prefill step. This may "
           "help to disclose any issues related to kv cache.");
@@ -118,19 +123,19 @@ absl::Status MainHelper(int argc, char** argv) {
     ABSL_LOG(INFO)
         << "Example usage: ./litert_lm_main --model_path=<model_path> "
            "[--input_prompt=<input_prompt>] [--backend=<cpu|gpu|npu>] "
-           "[--vision_backend=<cpu|gpu>] "
-           "[--audio_backend=<cpu|gpu>] "
+           "[--vision_backend=<cpu|gpu>] [--audio_backend=<cpu|gpu>] "
            "[--image_files=<image_path1>,<image_path2>,...] "
            "[--audio_files=<audio_path1>,<audio_path2>,...] "
            "[--sampler_backend=<cpu|gpu>] [--benchmark] "
            "[--benchmark_prefill_tokens=<num_prefill_tokens>] "
            "[--benchmark_decode_tokens=<num_decode_tokens>] "
-           "[--async=<true|false>] "
-           "[--report_peak_memory_footprint] "
-           "[--multi_turns=<true|false>] "
+           "[--async=<true|false>] [--force_f32=<true|false] "
+           "[--report_peak_memory_footprint] [--multi_turns=<true|false>] "
            "[--num_cpu_threads=<num_cpu_threads>] "
+           "[--gpu_no_external_tensor_mode=<true|false>] "
            "[--clear_kv_cache_before_prefill=<true|false>] "
-           "[--num_logits_to_print_after_decode=<num_logits_to_print>]";
+           "[--num_logits_to_print_after_decode=<num_logits_to_print>]"
+           "[--score_target_text=<target_text>]";
     return absl::InvalidArgumentError("No arguments provided.");
   }
 
@@ -155,6 +160,8 @@ absl::Status MainHelper(int argc, char** argv) {
   settings.force_f32 = absl::GetFlag(FLAGS_force_f32);
   settings.multi_turns = absl::GetFlag(FLAGS_multi_turns);
   settings.num_cpu_threads = absl::GetFlag(FLAGS_num_cpu_threads);
+  settings.gpu_no_external_tensor_mode =
+      absl::GetFlag(FLAGS_gpu_no_external_tensor_mode);
   settings.clear_kv_cache_before_prefill =
       absl::GetFlag(FLAGS_clear_kv_cache_before_prefill);
   settings.num_logits_to_print_after_decode =
