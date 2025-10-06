@@ -243,6 +243,7 @@ cc_library(
         "//runtime/util:convert_tensor_buffer",
         "//runtime/util:file_util",
         "//runtime/util:litert_status_util",
+        "@litert//tflite/delegates/xnnpack:xnnpack_delegate",
     ] + select({
         "@litert//litert:litert_link_capi_so": [
             "@litert//litert/cc:litert_api_with_dynamic_runtime",

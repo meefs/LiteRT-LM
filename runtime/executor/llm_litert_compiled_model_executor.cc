@@ -53,6 +53,7 @@
 #include "runtime/util/file_util.h"
 #include "runtime/util/litert_status_util.h"
 #include "runtime/util/status_macros.h"  // IWYU pragma: keep
+#include "tflite/delegates/xnnpack/xnnpack_delegate.h"  // from @litert
 
 namespace litert::lm {
 namespace {
@@ -90,9 +91,6 @@ absl::Status InitializeEmbeddingLookups(
     ModelResources& resources,
     std::unique_ptr<EmbeddingLookupManager>& embedding_lookup,
     std::unique_ptr<EmbeddingLookupManager>& per_layer_embedding_lookup) {
-  // Create embedding lookups from the resources.
-  auto text_embedder_model =
-      resources.GetTFLiteModel(ModelType::kTfLiteEmbedder);
   auto end_of_audio_model =
       resources.GetTFLiteModel(ModelType::kTfLiteEndOfAudio);
   absl::flat_hash_map<int, const litert::Model*>
@@ -101,6 +99,9 @@ absl::Status InitializeEmbeddingLookups(
     end_of_multi_modal_embedding_models.insert(
         {ExecutorAudioData::kEndToken, end_of_audio_model.value()});
   }
+
+  auto text_embedder_model =
+      resources.GetTFLiteModel(ModelType::kTfLiteEmbedder);
   if (text_embedder_model.ok()) {
     ASSIGN_OR_RETURN(
         embedding_lookup,
@@ -150,11 +151,12 @@ void LogValues(absl::Span<const float> values, size_t num_values_to_log,
 
   size_t end_offset = values.size() - num_values_to_log;
   size_t mid_offset = end_offset / 2;
-  ABSL_LOG(INFO)
-      << debug << "(size=" << values.size() << "): "
-      << absl::StrJoin(values.subspan(0, num_values_to_log), ", ") << " ... "
-      << absl::StrJoin(values.subspan(mid_offset, num_values_to_log), ", ")
-      << " ... " << absl::StrJoin(values.subspan(end_offset), ", ");
+  ABSL_LOG(INFO) << debug << "(size=" << values.size() << "): "
+                 << absl::StrJoin(values.subspan(0, num_values_to_log), ", ")
+                 << " ... "
+                 << absl::StrJoin(values.subspan(mid_offset, num_values_to_log),
+                                  ", ")
+                 << " ... " << absl::StrJoin(values.subspan(end_offset), ", ");
 }
 
 void LogTensor(TensorBuffer& tensor, size_t num_values_to_log,
@@ -765,7 +767,7 @@ LlmLiteRtCompiledModelExecutor::Create(LlmExecutorSettings executor_settings,
         // BHWC conversion in NoExternalTensorsMode.
         gpu_compilation_options.AddExternalTensorPattern("kv_cache_");
         ASSIGN_OR_RETURN(auto sampler_backend,
-                        GetSamplerBackend(executor_settings));
+                         GetSamplerBackend(executor_settings));
         if (sampler_backend == Backend::GPU) {
           // GPU Sampler requires logits to be external tensors (PHWC4 format).
           gpu_compilation_options.AddExternalTensorPattern("logits");
@@ -785,7 +787,6 @@ LlmLiteRtCompiledModelExecutor::Create(LlmExecutorSettings executor_settings,
       break;
     }
     case Backend::CPU: {
-      // TODO: b/403132820 - Add accelerator compilation options for XNNPACK.
       Expected<CpuOptions> cpu_compilation_options = CpuOptions::Create();
       const uint32_t num_threads =
           executor_settings.GetBackendConfig<CpuConfig>()->number_of_threads;
@@ -802,6 +803,9 @@ LlmLiteRtCompiledModelExecutor::Create(LlmExecutorSettings executor_settings,
         cpu_compilation_options->SetXNNPackWeightCachePath(
             weight_cache_path.c_str());
       }
+      cpu_compilation_options->SetXNNPackFlags(
+          TFLITE_XNNPACK_DELEGATE_FLAG_ENABLE_LATEST_OPERATORS |
+          TFLITE_XNNPACK_DELEGATE_FLAG_ENABLE_SUBGRAPH_RESHAPING);
       LITERT_ASSIGN_OR_RETURN_ABSL(RuntimeOptions runtime_options,
                                    RuntimeOptions::Create());
       runtime_options.SetShloCompositeInlining(true);

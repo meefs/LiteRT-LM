@@ -105,7 +105,9 @@ TEST(ConversationTest, SendMessage) {
   // random weights.
   JsonMessage expected_message = {
       {"role", "assistant"},
-      {"content", {{{"type", "text"}, {"text", "하자ṅṅ zkušen помогут맷 ३"}}}}};
+      {"content",
+       {{{"type", "text"},
+         {"text", "하자ṅ kontroller thicknessesೊಂದಿಗೆ Decodingवर्ती"}}}}};
   const JsonMessage& json_message = std::get<JsonMessage>(message);
   EXPECT_EQ(json_message, expected_message);
 }
@@ -126,7 +128,9 @@ TEST(ConversationTest, SendMessageStream) {
   // random weights.
   JsonMessage expected_message = {
       {"role", "assistant"},
-      {"content", {{{"type", "text"}, {"text", "하자ṅṅ zkušen помогут맷 ३"}}}}};
+      {"content",
+       {{{"type", "text"},
+         {"text", "하자ṅ kontroller thicknessesೊಂದಿಗೆ Decodingवर्ती"}}}}};
   TestMessageObservable test_observable(expected_message);
   EXPECT_OK(conversation->SendMessageStream(
       JsonMessage{{"role", "user"}, {"content", "Hello world!"}},
@@ -160,7 +164,7 @@ TEST(ConversationTest, SendMessageWithPreface) {
   JsonMessage expected_message = {
       {"role", "assistant"},
       {"content",
-       {{{"type", "text"}, {"text", "约为✗ predictions дыхаnewLineevu"}}}}};
+       {{{"type", "text"}, {"text", "约为✗ predictions дыхаnewLine`);"}}}}};
   const JsonMessage& json_message = std::get<JsonMessage>(message);
   EXPECT_EQ(json_message, expected_message);
 }
