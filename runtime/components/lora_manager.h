@@ -18,11 +18,11 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
-#include <string>
 
 #include "absl/container/flat_hash_map.h"  // from @com_google_absl
 #include "absl/status/status.h"  // from @com_google_absl
 #include "absl/status/statusor.h"  // from @com_google_absl
+#include "absl/strings/string_view.h"  // from @com_google_absl
 #include "litert/cc/litert_compiled_model.h"  // from @litert
 #include "litert/cc/litert_model.h"  // from @litert
 #include "litert/cc/litert_tensor_buffer.h"  // from @litert
@@ -66,7 +66,7 @@ class LoraManager {
 
   // Returns a map of all the LoRA tensor names to their duplicated
   // TensorBuffers for the current LoRA ID.
-  absl::StatusOr<absl::flat_hash_map<std::string, litert::TensorBuffer>>
+  absl::StatusOr<absl::flat_hash_map<absl::string_view, litert::TensorBuffer>>
   GetLoRABuffers() const;
 
  private:

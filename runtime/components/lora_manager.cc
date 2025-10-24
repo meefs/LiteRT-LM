@@ -16,13 +16,13 @@
 
 #include <cstdint>
 #include <memory>
-#include <string>
 #include <utility>
 
 #include "absl/container/flat_hash_map.h"  // from @com_google_absl
 #include "absl/memory/memory.h"  // from @com_google_absl
 #include "absl/status/status.h"  // from @com_google_absl
 #include "absl/status/statusor.h"  // from @com_google_absl
+#include "absl/strings/string_view.h"  // from @com_google_absl
 #include "litert/cc/litert_compiled_model.h"  // from @litert
 #include "litert/cc/litert_model.h"  // from @litert
 #include "litert/cc/litert_tensor_buffer.h"  // from @litert
@@ -67,7 +67,7 @@ absl::Status LoraManager::UseLoRA(uint32_t lora_id) {
   return absl::OkStatus();
 }
 
-absl::StatusOr<absl::flat_hash_map<std::string, litert::TensorBuffer>>
+absl::StatusOr<absl::flat_hash_map<absl::string_view, litert::TensorBuffer>>
 LoraManager::GetLoRABuffers() const {
   if (!current_lora_id_.has_value()) {
     return absl::FailedPreconditionError("No LoRA ID is set");

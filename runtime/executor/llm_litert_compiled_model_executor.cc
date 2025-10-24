@@ -56,9 +56,9 @@
 #include "runtime/executor/llm_executor_io_types.h"
 #include "runtime/executor/llm_executor_processed_tokens.h"
 #include "runtime/executor/llm_executor_settings.h"
-#include "runtime/executor/magic_number_configs_helper.h"
 #include "runtime/util/convert_tensor_buffer.h"
 #include "runtime/util/file_util.h"
+#include "runtime/util/lora_util.h"
 #include "runtime/util/scoped_file.h"
 #include "runtime/util/status_macros.h"  // IWYU pragma: keep
 #include "tflite/delegates/xnnpack/xnnpack_delegate.h"  // from @litert
@@ -1000,6 +1000,10 @@ LlmLiteRtCompiledModelExecutor::Create(LlmExecutorSettings executor_settings,
   }
 
   for (auto input_name : decode_signature.InputNames()) {
+    if (IsLoRAInputName(input_name)) {
+      // We let LoraManager handle LoRA inputs.
+      continue;
+    }
     if (!absl::StartsWith(input_name, kv_cache_k_root_name) &&
         !absl::StartsWith(input_name, kv_cache_v_root_name)) {
       LITERT_ASSIGN_OR_RETURN(

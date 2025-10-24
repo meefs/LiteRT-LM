@@ -90,9 +90,9 @@ absl::StatusOr<litert::TensorBuffer> LoRA::GetLoRABuffer(
   return duplicated_buffer;
 }
 
-absl::StatusOr<absl::flat_hash_map<std::string, litert::TensorBuffer>>
+absl::StatusOr<absl::flat_hash_map<absl::string_view, litert::TensorBuffer>>
 LoRA::GetLoRABuffers() const {
-  absl::flat_hash_map<std::string, litert::TensorBuffer> buffers;
+  absl::flat_hash_map<absl::string_view, litert::TensorBuffer> buffers;
   for (const auto& [name, buffer] : lora_buffers_) {
     LITERT_ASSIGN_OR_RETURN_ABSL(buffers[name], buffer.Duplicate());
   }

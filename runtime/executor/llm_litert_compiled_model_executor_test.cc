@@ -14,6 +14,7 @@
 
 #include "runtime/executor/llm_litert_compiled_model_executor.h"
 
+#include <cstdint>
 #include <cstdlib>
 #include <filesystem>  // NOLINT: Required for path manipulation.
 #include <fstream>
