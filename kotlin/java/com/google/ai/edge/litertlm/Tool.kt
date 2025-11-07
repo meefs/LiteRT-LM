@@ -184,38 +184,41 @@ internal class Tooling(
 
     val description = toolAnnotation.description
 
-    val parameters = kFunction.parameters.drop(1) // Drop the instance parameter
-    val properties = JsonObject()
-    for (param in parameters) {
-      val paramAnnotation = param.annotations.find { it is ToolParam } as? ToolParam
-      val paramJsonSchema = getTypeJsonSchema(param.type)
-      // add "description" if provided
-      paramAnnotation?.description?.let { paramJsonSchema.addProperty("description", it) }
-      paramJsonSchema.addProperty("nullable", param.type.isMarkedNullable)
-      properties.add(param.toModelParamName(), paramJsonSchema)
-    }
-
-    val requiredParams = JsonArray()
-    for (param in parameters) {
-      if (!param.isOptional) {
-        requiredParams.add(param.toModelParamName())
-      }
-    }
-
-    val schema =
-      JsonObject().apply {
-        addProperty("type", "object")
-        add("properties", properties)
-        add("required", requiredParams)
-      }
-
     val openApiSpec =
       JsonObject().apply {
         val funcName = if (useSnakeCase) kFunction.name.camelToSnakeCase() else kFunction.name
         addProperty("name", funcName)
         addProperty("description", description)
-        add("parameters", schema)
       }
+
+    val parameters = kFunction.parameters.drop(1) // Drop the instance parameter
+    if (!parameters.isEmpty()) {
+      val properties = JsonObject()
+      for (param in parameters) {
+        val paramAnnotation = param.annotations.find { it is ToolParam } as? ToolParam
+        val paramJsonSchema = getTypeJsonSchema(param.type)
+        // add "description" if provided
+        paramAnnotation?.description?.let { paramJsonSchema.addProperty("description", it) }
+        if (param.type.isMarkedNullable) paramJsonSchema.addProperty("nullable", true)
+        properties.add(param.toModelParamName(), paramJsonSchema)
+      }
+
+      val requiredParams = JsonArray()
+      for (param in parameters) {
+        if (!param.isOptional) {
+          requiredParams.add(param.toModelParamName())
+        }
+      }
+
+      val schema =
+        JsonObject().apply {
+          addProperty("type", "object")
+          add("properties", properties)
+          if (!requiredParams.isEmpty) add("required", requiredParams)
+        }
+
+      openApiSpec.add("parameters", schema)
+    }
 
     return openApiSpec
   }
