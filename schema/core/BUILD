@@ -53,9 +53,9 @@ cc_library(
         "//runtime/util:litert_status_util",
         "//runtime/util:memory_mapped_file",
         "//runtime/util:scoped_file",
+        "@zlib//:zlib",
         "@sentencepiece//:sentencepiece_processor",
         "@litert//tflite:framework",
-        "@zlib//:zlib",
     ],
 )
 

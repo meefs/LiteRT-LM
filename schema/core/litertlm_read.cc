@@ -14,8 +14,6 @@
 
 #include "schema/core/litertlm_read.h"
 
-#include <zlib.h>
-
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -44,6 +42,7 @@
 #include "tflite/model_builder.h"  // from @litert
 #include "tflite/stderr_reporter.h"  // from @litert
 #include "zconf.h"  // from @zlib
+#include "zlib.h"  // from @zlib
 
 namespace litert {
 namespace lm {

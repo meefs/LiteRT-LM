@@ -15,8 +15,6 @@
 #ifndef THIRD_PARTY_ODML_LITERT_LM_SCHEMA_CORE_LITERTLM_SECTION_H
 #define THIRD_PARTY_ODML_LITERT_LM_SCHEMA_CORE_LITERTLM_SECTION_H
 
-#include <zlib.h>
-
 #include <cstddef>
 #include <cstdint>
 #include <fstream>
@@ -33,6 +31,7 @@
 #include "absl/strings/str_cat.h"  // from @com_google_absl
 #include "runtime/util/status_macros.h"  // NOLINT
 #include "zconf.h"  // from @zlib
+#include "zlib.h"  // from @zlib
 
 namespace litert {
 namespace lm {
