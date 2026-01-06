@@ -1153,7 +1153,6 @@ LlmLiteRtCompiledModelExecutorStatic::Create(
       // TODO: b/403132820 - Add accelerator compilation options for ML_DRIFT.
       LITERT_ASSIGN_OR_RETURN(auto& gpu_compilation_options,
                               compilation_options.GetGpuOptions());
-      gpu_compilation_options.EnableConstantTensorSharing(true);
       gpu_compilation_options.EnableInfiniteFloatCapping(true);
       gpu_compilation_options.EnableAllowSrcQuantizedFcConvOps(true);
       if (activation_data_type == ActivationDataType::FLOAT32) {
@@ -1204,6 +1203,7 @@ LlmLiteRtCompiledModelExecutorStatic::Create(
       auto advanced_settings = executor_settings.GetAdvancedSettings();
       int num_threads_to_upload = kDefaultNumThreadsToUpload;
       int num_threads_to_compile = kDefaultNumThreadsToCompile;
+      bool enable_constant_tensor_sharing = true;
       if (advanced_settings) {
         gpu_compilation_options.SetMadviseOriginalSharedTensors(
             advanced_settings->gpu_madvise_original_shared_tensors);
@@ -1224,7 +1224,14 @@ LlmLiteRtCompiledModelExecutorStatic::Create(
         if (advanced_settings->convert_weights_on_gpu) {
           gpu_compilation_options.SetConvertWeightsOnGpu(true);
         }
+        if (!advanced_settings->optimize_shader_compilation) {
+          gpu_compilation_options.DisableShaderOptimization(true);
+        }
+        enable_constant_tensor_sharing =
+            advanced_settings->share_constant_tensors;
       }
+      gpu_compilation_options.EnableConstantTensorSharing(
+          enable_constant_tensor_sharing);
       // TODO b/441627719 - Select backend by runtime options.
 #if defined(LITERT_USE_WEBGPU_ACCELERATOR)
       gpu_compilation_options.SetBackend(GpuOptions::Backend::kWebGpu);

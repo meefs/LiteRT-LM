@@ -107,3 +107,7 @@ ABSL_FLAG(int, num_threads_to_compile, -1,
 ABSL_FLAG(bool, convert_weights_on_gpu, false,
           "If true, the executor will convert weights on GPU. It's an "
           "experimental feature.");
+ABSL_FLAG(bool, optimize_shader_compilation, true,
+          "If true, optimize Vulkan shader compilation.");
+ABSL_FLAG(bool, share_constant_tensors, true,
+          "If true, the executor will enable constant tensor sharing.");

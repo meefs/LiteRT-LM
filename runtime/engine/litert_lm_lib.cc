@@ -195,6 +195,8 @@ absl::StatusOr<EngineSettings> CreateEngineSettings(
       .num_threads_to_upload = settings.num_threads_to_upload,
       .num_threads_to_compile = settings.num_threads_to_compile,
       .convert_weights_on_gpu = settings.convert_weights_on_gpu,
+      .optimize_shader_compilation = settings.optimize_shader_compilation,
+      .share_constant_tensors = settings.share_constant_tensors,
   };
   if (advanced_settings != AdvancedSettings()) {
     engine_settings.GetMutableMainExecutorSettings().SetAdvancedSettings(

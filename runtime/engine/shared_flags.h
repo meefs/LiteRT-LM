@@ -53,5 +53,7 @@ ABSL_DECLARE_FLAG(std::string, preferred_device_substr);
 ABSL_DECLARE_FLAG(int, num_threads_to_upload);
 ABSL_DECLARE_FLAG(int, num_threads_to_compile);
 ABSL_DECLARE_FLAG(bool, convert_weights_on_gpu);
+ABSL_DECLARE_FLAG(bool, optimize_shader_compilation);
+ABSL_DECLARE_FLAG(bool, share_constant_tensors);
 
 #endif  // THIRD_PARTY_ODML_LITERT_LM_RUNTIME_ENGINE_SHARED_FLAGS_H_

@@ -161,13 +161,25 @@ struct AdvancedSettings {
   // Number of threads for WebGPU weight upload. -1 means it's determined by
   // the runtime.
   int num_threads_to_upload = -1;
-  // Number of threads for WebGPU kernel compilation. -1 means it's determined
-  // by the runtime.
+  // Number of threads for WebGPU kernel shader compilation. -1 means it's
+  // determined by the runtime.
   int num_threads_to_compile = -1;
 
   // If true, the executor will convert weights on GPU. It's an experimental
   // feature.
   bool convert_weights_on_gpu = false;
+
+  // If true (by default), the executor enables Vulkan kernel shader
+  // optimization.
+  // Some GPU backends like Vulkan don't get much performance benefit from the
+  // shader optimization but just increase initialization time with longer
+  // shader compilation time.
+  bool optimize_shader_compilation = true;
+
+  // If true (by default), the executor enables constant tensor sharing.
+  // Some GPU backends like Vulkan may degrade the performance when constant
+  // tensor sharing is enabled.
+  bool share_constant_tensors = true;
 
   bool operator==(const AdvancedSettings& other) const {
     return prefill_batch_sizes == other.prefill_batch_sizes &&
@@ -184,7 +196,9 @@ struct AdvancedSettings {
            preferred_device_substr == other.preferred_device_substr &&
            num_threads_to_upload == other.num_threads_to_upload &&
            num_threads_to_compile == other.num_threads_to_compile &&
-           convert_weights_on_gpu == other.convert_weights_on_gpu;
+           convert_weights_on_gpu == other.convert_weights_on_gpu &&
+           optimize_shader_compilation == other.optimize_shader_compilation &&
+           share_constant_tensors == other.share_constant_tensors;
   }
 };
 std::ostream& operator<<(std::ostream& os, const AdvancedSettings& settings);

@@ -88,6 +88,8 @@ struct LiteRtLmSettings {
   int num_threads_to_upload = -1;
   int num_threads_to_compile = -1;
   bool convert_weights_on_gpu = false;
+  bool optimize_shader_compilation = true;
+  bool share_constant_tensors = true;
 };
 
 // Runs the LLM inference with the given settings.

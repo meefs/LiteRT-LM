@@ -266,6 +266,8 @@ TEST(LlmExecutorConfigTest, LlmExecutorSettingsWithAdvancedSettings) {
       .num_threads_to_upload = 4,
       .num_threads_to_compile = 2,
       .convert_weights_on_gpu = true,
+      .optimize_shader_compilation = false,
+      .share_constant_tensors = false,
   });
 
   std::stringstream oss;
@@ -305,6 +307,8 @@ preferred_device_substr: nvidia
 num_threads_to_upload: 4
 num_threads_to_compile: 2
 convert_weights_on_gpu: 1
+optimize_shader_compilation: 0
+share_constant_tensors: 0
 
 )");
   EXPECT_EQ(oss.str(), expected_output);
