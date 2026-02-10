@@ -218,7 +218,7 @@ target_link_libraries(runtime_components_constrained_decoding_llguidance_schema_
 
 
 add_litertlm_library(runtime_components_constrained_decoding_gemma_model_constraint_provider STATIC
-  ${LITERTLM_PATCHER_DIR}/stubs/gemma_model_constraint_provider_stub.cc
+  gemma_model_constraint_provider.cc
 )
 add_library(LiteRTLM::Runtime::Components::ConstrainedDecoding::GemmaModelConstraintProvider
   ALIAS runtime_components_constrained_decoding_gemma_model_constraint_provider)
@@ -237,7 +237,6 @@ target_link_libraries(runtime_components_constrained_decoding_gemma_model_constr
 
     LITERTLM_DEPS
 )
-
 
 
 add_library(runtime_components_constrained_decoding_libs INTERFACE)

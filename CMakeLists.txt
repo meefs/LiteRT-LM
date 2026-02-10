@@ -27,37 +27,22 @@ project(LiteRT-LM LANGUAGES C CXX)
 
 # --- Global Paths
 set(PROJECT_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
-
 set(LITERTLM_ROOT_DIR "${PROJECT_ROOT}" CACHE PATH "LiteRT-LM: Root of the LiteRT-LM workspace")
-
 set(LITERTLM_PACKAGES_DIR "${LITERTLM_ROOT_DIR}/cmake/packages" CACHE PATH "LiteRT-LM: Directory for build packages")
-
-
 set(LITERTLM_PATCHES_DIR "${LITERTLM_ROOT_DIR}/cmake/patches"
     CACHE PATH "LiteRT-LM: Directory for build patches")
-
-# set(LITERTLM_SHIMS_DIR "${LITERTLM_PATCHES_DIR}/shims"
-    # CACHE PATH "LiteRT-LM: Directory for virtualization shims")
-
 set(LITERTLM_MODULES_DIR "${LITERTLM_ROOT_DIR}/cmake/modules"
     CACHE PATH "LiteRT-LM: Modules path, appended to CMAKE_MODULE_PATH")
-
 set(LITERTLM_SCRIPTS_DIR "${LITERTLM_ROOT_DIR}/cmake/scripts"
     CACHE PATH "LiteRT-LM: Directory for internal build and automation scripts")
-
 set(LITERTLM_LOCAL_STAGING_DIR "${CMAKE_BINARY_DIR}/staging/lib" CACHE INTERNAL "")
 file(MAKE_DIRECTORY "${LITERTLM_LOCAL_STAGING_DIR}")
-
 set(LITERTLM_RUST_TARGET "" CACHE STRING "Rust target triple (e.g., aarch64-linux-android). Leave empty for host.")
-
 set(LITERTLM_RUST_FILES
     "${PROJECT_ROOT}/runtime/components/rust/minijinja_template.rs"
     "${PROJECT_ROOT}/runtime/components/tool_use/rust/parsers.rs"
-
     CACHE INTERNAL "Rust files to include in the cxx bridge")
-
 set(LITERTLM_CARGO_TOML "${PROJECT_ROOT}/Cargo.toml" CACHE INTERNAL "Path to LiteRT-LM's Cargo.toml")
-
 set(LITERTLM_PROTO_FILES
   "${PROJECT_ROOT}/runtime/proto/engine.proto"
   "${PROJECT_ROOT}/runtime/proto/llm_metadata.proto"
@@ -69,28 +54,22 @@ set(LITERTLM_PROTO_FILES
   CACHE INTERNAL
   "Protobuf files that will be processed with protoc"
 )
-
 set(LITERTLM_FLATBUFFERS_FILES
     "${PROJECT_ROOT}/schema/litertlm_header_schema.fbs"
     CACHE INTERNAL
     "FlatBuffers files that will be processed with flatc"
 )
 
-
-
 ### TODO(totero): Replace references to these with the namespaced versions.
 set(SCRIPTS_DIR      "${LITERTLM_SCRIPTS_DIR}")
 set(PATCHES_DIR      "${LITERTLM_PATCHES_DIR}")
-
 set(MODULES_DIR        "${LITERTLM_MODULES_DIR}")
 list(APPEND CMAKE_MODULE_PATH   "${LITERTLM_MODULES_DIR}")
 ###
 
 set(EXTERNAL_PROJECT_BINARY_DIR "${CMAKE_BINARY_DIR}/external")
 set(THIRD_PARTY_DIR             "${CMAKE_BINARY_DIR}/third_party")
-
 set(GENERATED_SRC_DIR           "${CMAKE_BINARY_DIR}/generated/src" CACHE PATH "Root for generated code")
-
 set(LITERTLM_INCLUDE_PATHS
   "${GENERATED_SRC_DIR}"
   "${CMAKE_BINARY_DIR}"
@@ -133,7 +112,6 @@ include(macros)
 # --- Dependencies
 include("${LITERTLM_MODULES_DIR}/fetch_content.cmake")
 include("${LITERTLM_MODULES_DIR}/external_project.cmake")
-
 include("${LITERTLM_MODULES_DIR}/collect_dependencies.cmake")
 
 if(TARGET LITERTLM_DEPS)
@@ -147,7 +125,6 @@ endif()
 include("${LITERTLM_MODULES_DIR}/generators.cmake")
 generate_src_files(LITERTLM_CORE_FILES ${ALL_SOURCE_FILES} ${ALL_HEADER_FILES})
 generate_src_files(LITERTLM_FLATBUFFER_FILES ${ALL_SCHEMA_FILES})
-# generate_flatbuffers(litertlm_generated_flatbuffers)
 
 if(LITERTLM_CORE_FILES)
     include("${LITERTLM_MODULES_DIR}/patcher.cmake")
@@ -157,14 +134,18 @@ if(LITERTLM_CORE_FILES)
         "${LITERTLM_PATCHES_DIR}/litertlm_patches.json"
     )
     apply_patches_from_json("${LITERTLM_PATCHES_DIR}/litertlm_patches.json")
-endif()
 
+    if(NOT EXISTS "${GENERATED_SRC_DIR}/runtime/components/constrained_decoding/gemma_model_constraint_provider.cc")
+      file(COPY "${LITERTLM_PATCHES_DIR}/stubs/gemma_model_constraint_provider.cc"
+        DESTINATION "${GENERATED_SRC_DIR}/runtime/components/constrained_decoding"
+      )
+    endif()
+endif()
 
 add_compile_definitions(
     absl_nullable=
     absl_nonnull=
 )
-
 
 set(TENSORFLOW_MISSING_SRCS
     "${TENSORFLOW_SOURCE_DIR}/tensorflow/compiler/mlir/lite/allocation.cc"
@@ -176,15 +157,12 @@ set(TENSORFLOW_MISSING_SRCS
 )
 set_source_files_properties(${TENSORFLOW_MISSING_SRCS} PROPERTIES GENERATED TRUE)
 
-
 add_subdirectory(c)
 add_subdirectory(schema)
 add_subdirectory(runtime)
 
-
 include("${LITERTLM_MODULES_DIR}/local_aggregate.cmake")
 generate_local_aggregate()
-
 
 add_executable(litert_lm_main
     "runtime/engine/litert_lm_main.cc"
@@ -220,7 +198,6 @@ target_link_libraries(litert_lm_main
         minja_lib
         zlib_lib
         antlr_lib
-
         LiteRTLM::nlohmann_json::nlohmann_json
         opencl_headers_lib
         "-lz" "-lrt" "-lpthread" "-ldl"

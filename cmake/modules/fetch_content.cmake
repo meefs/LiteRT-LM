@@ -15,7 +15,6 @@
 
 include(FetchContent)
 
-
 # --- ANTLR ---
 set(ANTLR_SRC_DIR ${CMAKE_BINARY_DIR}/_deps/antlr_lib-src/runtime/Cpp/runtime/src CACHE PATH "Path to antlr source directory")
 FetchContent_Declare(
@@ -56,11 +55,11 @@ set(LLGUIDANCE_SRC_DIR ${THIRD_PARTY_DIR}/llguidance CACHE PATH "Path to llguida
 FetchContent_Declare(
   llguidance
   GIT_REPOSITORY https://github.com/guidance-ai/llguidance.git
-  GIT_TAG main 
+  GIT_TAG main
   SOURCE_DIR ${LLGUIDANCE_SRC_DIR}
 )
 FetchContent_MakeAvailable(llguidance)
-  set(_cargo_command 
+  set(_cargo_command
     cargo build --release --target-dir ${CMAKE_BINARY_DIR} --manifest-path ${LLGUIDANCE_SRC_DIR}/parser/Cargo.toml
     )
   if(LITERTLM_RUST_TARGET)
@@ -101,36 +100,7 @@ FetchContent_MakeAvailable(Corrosion)
 if(TARGET Corrosion)
   include(Corrosion)
 endif()
-#   corrosion_import_crate(MANIFEST_PATH ${LLGUIDANCE_SRC_DIR}/parser/Cargo.toml)
 
-#   if(TARGET llguidance)
-#         add_library(llguidance_lib ALIAS llguidance)
-#         message(STATUS "SUCCESS: llguidance target created and aliased.")
-#     else()
-#         message(FATAL_ERROR "Corrosion failed to create 'llguidance' target from Cargo.toml")
-#     endif()
-
-#   message(STATUS "Searching for cbindge...")
-
-#   find_program(CBINDGEN_EXE cbindgen)
-#     if(CBINDGEN_EXE)
-#         add_custom_target(generate_llguidance_header
-#             COMMAND ${CBINDGEN_EXE} --config ${LLGUIDANCE_SRC_DIR}/parser/cbindgen.toml --crate llguidance --output ${GENERATED_SRC_DIR}/llguidance.h .
-#             WORKING_DIRECTORY ${LLGUIDANCE_SRC_DIR}/parser
-#             COMMENT "Generating llguidance.h with cbindgen"
-#         )
-        
-#         add_dependencies(llguidance generate_llguidance_header)
-#     else()
-#         message(FATAL_ERROR "cbindgen not found! Cannot generate headers.")
-#     endif()
-
-#     add_library(llguidance_interface INTERFACE)
-#     target_include_directories(llguidance_interface INTERFACE ${GENERATED_SRC_DIR})
-    
-
-#     target_link_libraries(llguidance PUBLIC llguidance_interface)
-# endif()
 
 # --- LibPNG ---
 set(LIBPNG_SRC_DIR ${THIRD_PARTY_DIR}/libpng CACHE PATH "Path to libpng source directory")
@@ -181,8 +151,6 @@ endblock()
 if(TARGET kissfft)
   add_library(kissfft_lib ALIAS kissfft)
 endif()
-
-
 
 
 # --- MiniAudio ---

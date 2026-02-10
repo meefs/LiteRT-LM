@@ -15,10 +15,8 @@
 
 include_guard(GLOBAL)
 
-
 set(LITERTLM_GENERATORS_DIR "${LITERTLM_MODULES_DIR}/generators" CACHE INTERNAL "")
 include("${LITERTLM_GENERATORS_DIR}/generate_protobuf.cmake")
-# include("${LITERTLM_GENERATORS_DIR}/generate_flatbuffers.cmake") # Retained for future use.
 include("${LITERTLM_GENERATORS_DIR}/generate_cxxbridge.cmake")
 
 
@@ -52,7 +50,6 @@ function(generate_src_files OUTPUT_CLEAN_PATHS)
 
     set(${OUTPUT_CLEAN_PATHS} "${CLEANED_PATHS_OUT}" PARENT_SCOPE)
 endfunction()
-
 
 
 add_litertlm_library(litertlm_generated_protobuf STATIC)
@@ -103,20 +100,6 @@ file(GLOB_RECURSE SCHEMA_FBS_FILES "schema/*.fbs")
 list(APPEND ALL_SOURCE_FILES ${C_SRC_FILES} ${RUNTIME_SRC_FILES} ${SCHEMA_SRC_FILES})
 list(APPEND ALL_HEADER_FILES ${C_HDR_FILES} ${RUNTIME_HDR_FILES} ${SCHEMA_HDR_FILES})
 list(APPEND ALL_SCHEMA_FILES ${SCHEMA_FBS_FILES})
-
-set(ALL_SOURCE_FILES 
-    ${C_SRC_FILES} 
-    ${RUNTIME_SRC_FILES} 
-    ${SCHEMA_SRC_FILES}
-)
-set(ALL_HEADER_FILES 
-    ${C_HDR_FILES} 
-    ${RUNTIME_HDR_FILES} 
-    ${SCHEMA_HDR_FILES}
-)
-set(ALL_GENERATED_OUTPUTS ${C_SRC_FILES} ${RUNTIME_SRC_FILES} ${SCHEMA_SRC_FILES})
-
-
 
 set(ALL_GENERATED_OUTPUTS ${C_SRC_FILES} ${RUNTIME_SRC_FILES} ${SCHEMA_SRC_FILES})
 

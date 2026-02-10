@@ -112,12 +112,11 @@ endmacro()
 
 macro(add_litertlm_library target_name lib_type)
     file(RELATIVE_PATH _rel_path "${PROJECT_ROOT}" "${CMAKE_CURRENT_SOURCE_DIR}")
-    
+
     set(_redirected_sources "")
 
     foreach(_src ${ARGN})
         if(NOT IS_ABSOLUTE "${_src}")
-
             list(APPEND _redirected_sources "${GENERATED_SRC_DIR}/${_rel_path}/${_src}")
         else()
             list(APPEND _redirected_sources "${_src}")
