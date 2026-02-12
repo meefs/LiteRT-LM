@@ -468,14 +468,23 @@ absl::StatusOr<CompilationOptionsResult> ConfigureCompilationOptions(
 #else   // !__APPLE__
       gpu_compilation_options.SetPreferTextureWeights(true);
 #endif  // !__APPLE__
-      ASSIGN_OR_RETURN(auto model_path,
-                       executor_settings.GetModelAssets().GetPath());
-      absl::string_view model_name = Basename(model_path);
-      gpu_compilation_options.SetModelCacheKey(model_name.data());
+      // If the model path is available, use the model name as the cache key.
+      // Otherwise, if we are loading from an fd, there will be no
+      // model token and caching will be disabled.
+      //
+      // TODO: b/483472584 - Support caching when loading model from fd.
+      auto model_path_or_status = executor_settings.GetModelAssets().GetPath();
+      if (model_path_or_status.ok()) {
+        absl::string_view model_path = *model_path_or_status;
+        absl::string_view model_name = Basename(model_path);
+        gpu_compilation_options.SetModelCacheKey(model_name.data());
+      }
 
       bool serialization_dir_set = false;
       if (cache_path != ":nocache") {
         if (cache_path.empty()) {
+          ASSIGN_OR_RETURN(auto model_path,
+                           executor_settings.GetModelAssets().GetPath());
           cache_path = std::filesystem::path(std::string(model_path))
                            .parent_path()
                            .string();
