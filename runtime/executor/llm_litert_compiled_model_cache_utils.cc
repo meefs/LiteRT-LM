@@ -187,4 +187,10 @@ absl::Status ExpandBuffer(const uint8_t* src_data,
   return absl::OkStatus();
 };
 
+bool IsKVCacheTensor(absl::string_view tensor_name) {
+  return absl::StartsWith(tensor_name, "kv_cache_") ||
+         absl::StartsWith(tensor_name, "k_cache_") ||
+         absl::StartsWith(tensor_name, "v_cache_");
+}
+
 }  // namespace litert::lm

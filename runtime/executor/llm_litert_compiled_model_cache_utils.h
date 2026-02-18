@@ -85,5 +85,8 @@ absl::Status ExpandBuffer(const uint8_t* src_data,
                           absl::Span<const int> src_shape, uint8_t* dst_data,
                           absl::Span<const int> dst_shape, size_t element_size);
 
+// Returns true if the tensor name is a KV cache tensor.
+bool IsKVCacheTensor(absl::string_view tensor_name);
+
 }  // namespace litert::lm
 #endif  // THIRD_PARTY_ODML_LITERT_LM_RUNTIME_EXECUTOR_LLM_LITERT_COMPILED_MODEL_CACHE_UTILS_H_

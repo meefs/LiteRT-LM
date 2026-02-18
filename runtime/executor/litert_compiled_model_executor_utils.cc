@@ -176,6 +176,10 @@ absl::Status GetKVCacheRootNames(std::vector<absl::string_view> input_names,
       k_root_name = "k_cache_";
       v_root_name = "v_cache_";
       return absl::OkStatus();
+    } else if (input_name == "kv_cache_c_0") {
+      k_root_name = "kv_cache_c_";
+      v_root_name = "kv_cache_c_";
+      return absl::OkStatus();
     }
   }
   for (auto output_name : output_names) {
@@ -186,6 +190,10 @@ absl::Status GetKVCacheRootNames(std::vector<absl::string_view> input_names,
     } else if (output_name == "k_cache_0") {
       k_root_name = "k_cache_";
       v_root_name = "v_cache_";
+      return absl::OkStatus();
+    } else if (output_name == "kv_cache_c_0") {
+      k_root_name = "kv_cache_c_";
+      v_root_name = "kv_cache_c_";
       return absl::OkStatus();
     }
   }

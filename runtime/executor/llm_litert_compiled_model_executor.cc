@@ -1754,9 +1754,7 @@ LlmLiteRtCompiledModelExecutorStatic::Create(
   for (auto input_name : prefill_signature.InputNames()) {
     // Skip creating buffers for the input tokens, positions and attn mask. Move
     // into prefill function to create them based on the ids size.
-    if ((!absl::StartsWith(input_name, kv_cache_k_root_name) &&
-         !absl::StartsWith(input_name, kv_cache_v_root_name)) ||
-        gpu_optimized_single_buffer_cache) {
+    if (!IsKVCacheTensor(input_name) || gpu_optimized_single_buffer_cache) {
       continue;
     }
     LITERT_ASSIGN_OR_RETURN(
@@ -1775,8 +1773,7 @@ LlmLiteRtCompiledModelExecutorStatic::Create(
     LITERT_ASSIGN_OR_RETURN(
         auto output_buffer,
         compiled_model.CreateOutputBuffer(prefill_signature_key, output_name));
-    if (absl::StartsWith(output_name, kv_cache_k_root_name) ||
-        absl::StartsWith(output_name, kv_cache_v_root_name)) {
+    if (IsKVCacheTensor(output_name)) {
       if (backend == Backend::GPU) {
         output_kv_cache_buffers[output_name] = std::move(output_buffer);
       }
@@ -1799,8 +1796,7 @@ LlmLiteRtCompiledModelExecutorStatic::Create(
       // We let LoraManager handle LoRA inputs.
       continue;
     }
-    if (absl::StartsWith(input_name, kv_cache_k_root_name) ||
-        absl::StartsWith(input_name, kv_cache_v_root_name)) {
+    if (IsKVCacheTensor(input_name)) {
       continue;
     }
     LITERT_ASSIGN_OR_RETURN(
@@ -1811,8 +1807,7 @@ LlmLiteRtCompiledModelExecutorStatic::Create(
   auto output_names = decode_signature.OutputNames();
   for (int i = 0; i < output_names.size(); ++i) {
     auto output_name = output_names[i];
-    if (absl::StartsWith(output_name, kv_cache_k_root_name) ||
-        absl::StartsWith(output_name, kv_cache_v_root_name)) {
+    if (IsKVCacheTensor(output_name)) {
       continue;
     }
     // If we are using the GPU sampler and the model is compiled with FP16

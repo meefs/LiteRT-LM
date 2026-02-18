@@ -222,5 +222,15 @@ TEST(LlmLiteRtCompiledModelCacheUtilsTest, ClearTensorBufferTest) {
                                          0.0f, 0.0f, 0.0f, 0.0f}));
 }
 
+TEST(LlmLiteRtCompiledModelCacheUtilsTest, IsKVCacheTensorTest) {
+  EXPECT_TRUE(IsKVCacheTensor("kv_cache_0"));
+  EXPECT_TRUE(IsKVCacheTensor("k_cache_0"));
+  EXPECT_TRUE(IsKVCacheTensor("v_cache_0"));
+  EXPECT_FALSE(IsKVCacheTensor("kv_cache"));
+  EXPECT_FALSE(IsKVCacheTensor("k_cache"));
+  EXPECT_FALSE(IsKVCacheTensor("v_cache"));
+  EXPECT_FALSE(IsKVCacheTensor("other"));
+}
+
 }  // namespace
 }  // namespace litert::lm
