@@ -75,6 +75,7 @@ data class ConversationConfig(
   val samplerConfig: SamplerConfig? = null,
   @Deprecated("Use systemInstruction instead. e.g., systemInstrction = Contents.of(\"Be helpful\")")
   val systemMessage: Message? = null,
+  val automaticToolCalling: Boolean = true,
 )
 
 /**

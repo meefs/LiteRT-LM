@@ -64,14 +64,56 @@ import kotlinx.coroutines.flow.callbackFlow
  *
  * @property handle The native handle to the conversation object.
  * @property toolManager The ToolManager instance to use for this conversation.
+ * @property automaticToolCalling Whether to enable automatic tool calling.
  */
-class Conversation(private val handle: Long, val toolManager: ToolManager = ToolManager()) :
-  AutoCloseable {
+class Conversation(
+  private val handle: Long,
+  val toolManager: ToolManager = ToolManager(),
+  val automaticToolCalling: Boolean = true,
+) : AutoCloseable {
   private val _isAlive = AtomicBoolean(true)
 
   /** Whether the conversation is alive and ready to be used, */
   val isAlive: Boolean
     get() = _isAlive.get()
+
+  /**
+   * Sends a message to the model and returns the response. This is a synchronous call.
+   *
+   * This method handles potential tool calls returned by the model. If a tool call is detected, the
+   * corresponding tool is executed, and the result is sent back to the model. This process is
+   * repeated until the model returns a final response without tool calls, up to
+   * [RECURRING_TOOL_CALL_LIMIT] times.
+   *
+   * @param message The message to send to the model.
+   * @return The model's response message.
+   * @throws IllegalStateException if the conversation is not alive, if the native layer returns an
+   *   invalid response, or if the tool call limit is exceeded.
+   * @throws LiteRtLmJniException if an error occurs during the native call.
+   */
+  fun sendMessage(message: Message): Message {
+    checkIsAlive()
+
+    var currentMessageJson = message.toJson()
+
+    for (i in 0..<RECURRING_TOOL_CALL_LIMIT) {
+      val responseJsonString = LiteRtLmJni.nativeSendMessage(handle, currentMessageJson.toString())
+      val responseJsonObject = JsonParser.parseString(responseJsonString).asJsonObject
+
+      if (responseJsonObject.has("tool_calls")) {
+        if (!automaticToolCalling) {
+          return jsonToMessage(responseJsonObject)
+        }
+        currentMessageJson = handleToolCalls(responseJsonObject)
+        // Loop back to send the tool response
+      } else if (responseJsonObject.has("content")) {
+        return jsonToMessage(responseJsonObject)
+      } else {
+        throw IllegalStateException("Invalid response from native layer: $responseJsonString")
+      }
+    }
+    throw IllegalStateException("Exceeded recurring tool call limit of $RECURRING_TOOL_CALL_LIMIT")
+  }
 
   /**
    * Sends a list of content to the model and returns the response. This is a synchronous call.
@@ -88,24 +130,7 @@ class Conversation(private val handle: Long, val toolManager: ToolManager = Tool
    * @throws LiteRtLmJniException if an error occurs during the native call.
    */
   fun sendMessage(contents: Contents): Message {
-    checkIsAlive()
-
-    var currentMessageJson = Message.user(contents).toJson()
-
-    for (i in 0..<RECURRING_TOOL_CALL_LIMIT) {
-      val responseJsonString = LiteRtLmJni.nativeSendMessage(handle, currentMessageJson.toString())
-      val responseJsonObject = JsonParser.parseString(responseJsonString).asJsonObject
-
-      if (responseJsonObject.has("tool_calls")) {
-        currentMessageJson = handleToolCalls(responseJsonObject)
-        // Loop back to send the tool response
-      } else if (responseJsonObject.has("content")) {
-        return jsonToMessage(responseJsonObject)
-      } else {
-        throw IllegalStateException("Invalid response from native layer: $responseJsonString")
-      }
-    }
-    throw IllegalStateException("Exceeded recurring tool call limit of $RECURRING_TOOL_CALL_LIMIT")
+    return sendMessage(Message.user(contents))
   }
 
   /**
@@ -125,7 +150,7 @@ class Conversation(private val handle: Long, val toolManager: ToolManager = Tool
   fun sendMessage(text: String): Message = sendMessage(Contents.of(text))
 
   /**
-   * Sends a message to the model and returns the response. This is a synchronous call.
+   * Send a message to the model and returns the response async with a callback.
    *
    * This method handles potential tool calls returned by the model. If a tool call is detected, the
    * corresponding tool is executed, and the result is sent back to the model. This process is
@@ -133,13 +158,16 @@ class Conversation(private val handle: Long, val toolManager: ToolManager = Tool
    * [RECURRING_TOOL_CALL_LIMIT] times.
    *
    * @param message The message to send to the model.
-   * @return The model's response message.
-   * @throws IllegalStateException if the conversation is not alive, if the native layer returns an
-   *   invalid response, or if the tool call limit is exceeded.
-   * @throws LiteRtLmJniException if an error occurs during the native call.
+   * @param callback The callback to receive the streaming responses.
+   * @throws IllegalStateException if the conversation has already been closed or the content is
+   *   empty.
    */
-  @Deprecated("Use sendMessage(String) or sendMessage(Contents).")
-  fun sendMessage(message: Message): Message = sendMessage(message.contents)
+  fun sendMessageAsync(message: Message, callback: MessageCallback) {
+    checkIsAlive()
+
+    val jniCallback = JniMessageCallbackImpl(callback)
+    LiteRtLmJni.nativeSendMessageAsync(handle, message.toJson().toString(), jniCallback)
+  }
 
   /**
    * Send a list of contents to the model and returns the response async with a callback.
@@ -154,16 +182,8 @@ class Conversation(private val handle: Long, val toolManager: ToolManager = Tool
    * @throws IllegalStateException if the conversation has already been closed or the content is
    *   empty.
    */
-  fun sendMessageAsync(contents: Contents, callback: MessageCallback) {
-    checkIsAlive()
-
-    val jniCallback = JniMessageCallbackImpl(callback)
-    LiteRtLmJni.nativeSendMessageAsync(
-      handle,
-      Message.user(contents).toJson().toString(),
-      jniCallback,
-    )
-  }
+  fun sendMessageAsync(contents: Contents, callback: MessageCallback) =
+    sendMessageAsync(Message.user(contents), callback)
 
   /**
    * Send a text to the model and returns the response async with a callback.
@@ -182,7 +202,7 @@ class Conversation(private val handle: Long, val toolManager: ToolManager = Tool
     sendMessageAsync(Contents.of(text), callback)
 
   /**
-   * Send a message to the model and returns the response async with a callback.
+   * Sends a message to the model and returns the response async as a [Flow].
    *
    * This method handles potential tool calls returned by the model. If a tool call is detected, the
    * corresponding tool is executed, and the result is sent back to the model. This process is
@@ -190,33 +210,13 @@ class Conversation(private val handle: Long, val toolManager: ToolManager = Tool
    * [RECURRING_TOOL_CALL_LIMIT] times.
    *
    * @param message The message to send to the model.
-   * @param callback The callback to receive the streaming responses.
-   * @throws IllegalStateException if the conversation has already been closed or the content is
-   *   empty.
-   */
-  @Deprecated(
-    "Use sendMessageAsync(String, MessageCallback) or " +
-      "sendMessageAsync(Contents, MessageCallback)."
-  )
-  fun sendMessageAsync(message: Message, callback: MessageCallback) =
-    sendMessageAsync(message.contents, callback)
-
-  /**
-   * Sends a list of contents to the model and returns the response async as a [Flow].
-   *
-   * This method handles potential tool calls returned by the model. If a tool call is detected, the
-   * corresponding tool is executed, and the result is sent back to the model. This process is
-   * repeated until the model returns a final response without tool calls, up to
-   * [RECURRING_TOOL_CALL_LIMIT] times.
-   *
-   * @param contents The list of contents to send to the model.
    * @return A Flow of messages representing the model's response.
    * @throws IllegalStateException if the conversation has already been closed or the content is
    *   empty.
    */
-  fun sendMessageAsync(contents: Contents): Flow<Message> = callbackFlow {
+  fun sendMessageAsync(message: Message): Flow<Message> = callbackFlow {
     sendMessageAsync(
-      contents,
+      message,
       object : MessageCallback {
         override fun onMessage(message: Message) {
           val unused = trySend(message)
@@ -235,6 +235,21 @@ class Conversation(private val handle: Long, val toolManager: ToolManager = Tool
   }
 
   /**
+   * Sends a list of contents to the model and returns the response async as a [Flow].
+   *
+   * This method handles potential tool calls returned by the model. If a tool call is detected, the
+   * corresponding tool is executed, and the result is sent back to the model. This process is
+   * repeated until the model returns a final response without tool calls, up to
+   * [RECURRING_TOOL_CALL_LIMIT] times.
+   *
+   * @param contents The list of contents to send to the model.
+   * @return A Flow of messages representing the model's response.
+   * @throws IllegalStateException if the conversation has already been closed or the content is
+   *   empty.
+   */
+  fun sendMessageAsync(contents: Contents): Flow<Message> = sendMessageAsync(Message.user(contents))
+
+  /**
    * Sends a text to the model and returns the response async as a [Flow].
    *
    * This method handles potential tool calls returned by the model. If a tool call is detected, the
@@ -248,22 +263,6 @@ class Conversation(private val handle: Long, val toolManager: ToolManager = Tool
    *   empty.
    */
   fun sendMessageAsync(text: String): Flow<Message> = sendMessageAsync(Contents.of(text))
-
-  /**
-   * Sends a message to the model and returns the response async as a [Flow].
-   *
-   * This method handles potential tool calls returned by the model. If a tool call is detected, the
-   * corresponding tool is executed, and the result is sent back to the model. This process is
-   * repeated until the model returns a final response without tool calls, up to
-   * [RECURRING_TOOL_CALL_LIMIT] times.
-   *
-   * @param message The message to send to the model.
-   * @return A Flow of messages representing the model's response.
-   * @throws IllegalStateException if the conversation has already been closed or the content is
-   *   empty.
-   */
-  @Deprecated("Use sendMessageAsync(String) or sendMessageAsync(Contents).")
-  fun sendMessageAsync(message: Message): Flow<Message> = sendMessageAsync(message.contents)
 
   private fun handleToolCalls(toolCallsJsonObject: JsonObject): JsonObject {
     val toolCallsJSONArray = toolCallsJsonObject.getAsJsonArray("tool_calls")
@@ -303,6 +302,10 @@ class Conversation(private val handle: Long, val toolManager: ToolManager = Tool
       val messageJsonObject = JsonParser.parseString(messageJsonString).asJsonObject
 
       if (messageJsonObject.has("tool_calls")) {
+        if (!automaticToolCalling) {
+          callback.onMessage(jsonToMessage(messageJsonObject))
+          return
+        }
         if (toolCallCount >= RECURRING_TOOL_CALL_LIMIT) {
           callback.onError(
             IllegalStateException(
@@ -395,21 +398,44 @@ class Conversation(private val handle: Long, val toolManager: ToolManager = Tool
     private const val RECURRING_TOOL_CALL_LIMIT = 25
 
     private fun jsonToMessage(messageJsonObject: JsonObject): Message {
-      val contentsJsonArray = messageJsonObject.getAsJsonArray("content")
       val contents = mutableListOf<Content>()
 
-      for (contentElement in contentsJsonArray) {
-        val contentJsonObject = contentElement.asJsonObject
-        val type = contentJsonObject.get("type").asString
+      if (messageJsonObject.has("content")) {
+        val contentsJsonArray = messageJsonObject.getAsJsonArray("content")
 
-        if (type == "text") {
-          contents.add(Content.Text(contentJsonObject.get("text").asString))
+        for (contentElement in contentsJsonArray) {
+          val contentJsonObject = contentElement.asJsonObject
+          val type = contentJsonObject.get("type").asString
+
+          if (type == "text") {
+            contents.add(Content.Text(contentJsonObject.get("text").asString))
+          }
+        }
+      }
+
+      val toolCalls = mutableListOf<ToolCall>()
+      if (messageJsonObject.has("tool_calls")) {
+        val toolCallsJsonArray = messageJsonObject.getAsJsonArray("tool_calls")
+        for (toolCallElement in toolCallsJsonArray) {
+          val toolCallJsonObject = toolCallElement.asJsonObject
+          if (toolCallJsonObject.has("function")) {
+            val functionJsonObject = toolCallJsonObject.getAsJsonObject("function")
+            val functionName = functionJsonObject.get("name").asString
+            val arguments = functionJsonObject.getAsJsonObject("arguments")
+            toolCalls.add(ToolCall(functionName, arguments.toMap()))
+          }
         }
       }
 
       // Note: consider to parse the "role" from the messageJsonObject.
       // It seems that models can return "assistant" or "model".
-      return Message.model(Contents.of(contents))
+      return if (toolCalls.isNotEmpty()) {
+        val text = if (contents.isNotEmpty()) (contents.first() as? Content.Text)?.text else null
+        val contentsArg = if (text != null) Contents.of(text) else Contents.empty()
+        Message.model(contentsArg, toolCalls)
+      } else {
+        Message.model(Contents.of(contents))
+      }
     }
   }
 }

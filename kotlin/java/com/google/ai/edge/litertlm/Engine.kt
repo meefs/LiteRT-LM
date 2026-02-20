@@ -111,10 +111,10 @@ class Engine(val engineConfig: EngineConfig) : AutoCloseable {
         JsonArray().apply {
           conversationConfig.systemMessage?.let {
             // Convert the message's role to Role.SYSTEM for backward compatibility.
-            this.add(Message(it.contents, Role.SYSTEM).toJson())
+            this.add(Message(Role.SYSTEM, it.contents).toJson())
           }
 
-          conversationConfig.systemInstruction?.let { this.add(Message(it, Role.SYSTEM).toJson()) }
+          conversationConfig.systemInstruction?.let { this.add(Message(Role.SYSTEM, it).toJson()) }
 
           for (message in conversationConfig.initialMessages) {
             this.add(message.toJson())
@@ -131,6 +131,7 @@ class Engine(val engineConfig: EngineConfig) : AutoCloseable {
           ExperimentalFlags.enableConversationConstrainedDecoding,
         ),
         toolManager,
+        conversationConfig.automaticToolCalling,
       )
     }
   }

@@ -175,14 +175,14 @@ fun tool(openApiTool: OpenApiTool): ToolProvider {
         try {
           JsonParser.parseString(openApiTool.getToolDescriptionJsonString()).asJsonObject
         } catch (e: JsonParseException) {
-          throw ToolException("Failed to parse JSON. {${e}.message}")
+          throw ToolException("Failed to parse JSON. ${e.message}", e)
         }
 
       val name: String =
         try {
           toolDescription.get("name").asString
         } catch (e: Throwable) {
-          throw ToolException("Failed to parse field \"name\" as String. {${e}.message}")
+          throw ToolException("Failed to parse field \"name\" as String. ${e.message}", e)
         }
 
       val jsonTool =
@@ -246,7 +246,7 @@ class ToolManager(val tools: List<Any> = emptyList()) {
       val tool =
         internalTools[functionName]
           ?: throw IllegalArgumentException("Tool not found: ${functionName}")
-      return convertKotlinValueToJsonValue(tool.execute(params))
+      return tool.execute(params).toJsonElement()
     } catch (e: Exception) {
       return JsonPrimitive("Error occured. ${e.toString()}")
     }
@@ -269,34 +269,6 @@ class ToolManager(val tools: List<Any> = emptyList()) {
         )
       }
     }
-
-  private fun convertKotlinValueToJsonValue(kValue: Any?): JsonElement {
-    return when (kValue) {
-      is List<*> -> {
-        val array = JsonArray()
-        for (item in kValue) {
-          if (item != null) {
-            array.add(convertKotlinValueToJsonValue(item))
-          }
-        }
-        array
-      }
-      is Map<*, *> -> {
-        val obj = JsonObject()
-        for ((key, value) in kValue) {
-          if (key != null && value != null) {
-            obj.add(key.toString(), convertKotlinValueToJsonValue(value))
-          }
-        }
-        obj
-      }
-      is String -> JsonPrimitive(kValue)
-      is Number -> JsonPrimitive(kValue)
-      is Boolean -> JsonPrimitive(kValue)
-      is kotlin.Unit -> JsonPrimitive("") // special case when a Kotlin function return nothing.
-      else -> JsonPrimitive(kValue.toString())
-    }
-  }
 }
 
 /** Internal use only. */
@@ -476,4 +448,4 @@ private fun String.snakeToCamelCase(): String {
 }
 
 /** Exception related to tool calling. */
-class ToolException(message: String) : RuntimeException(message)
+class ToolException(message: String, cause: Throwable? = null) : RuntimeException(message, cause)
