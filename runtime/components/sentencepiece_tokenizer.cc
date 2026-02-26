@@ -100,13 +100,13 @@ absl::StatusOr<std::string> SentencePieceTokenizer::TokenIdsToText(
       } else {
         // If the token is a single byte or invalid/continuation byte and not
         // bundled with other tokens, decode it immediately.
-        text += decoded;
+        absl::StrAppend(&text, decoded);
       }
     } else {
       // If the token is not a byte token, decode the chunk of byte tokens and
       // clear buffer.
       if (!chunk_byte_token_ids.empty()) {
-        text += processor_->DecodeIds(chunk_byte_token_ids);
+        absl::StrAppend(&text, processor_->DecodeIds(chunk_byte_token_ids));
         chunk_byte_token_ids.clear();
       }
       // We are forced to use IdToPiece to account for leading whitespace.
@@ -114,7 +114,7 @@ absl::StatusOr<std::string> SentencePieceTokenizer::TokenIdsToText(
       // remove that which makes streaming decoding impossible.
       // e.g., [[change], [_volume]] -> "change volume" vs.
       //       [[change], [volume]] -> "changevolume"
-      text += processor_->IdToPiece(token_id);
+      absl::StrAppend(&text, processor_->IdToPiece(token_id));
     }
   }
   if (!chunk_byte_token_ids.empty()) {
@@ -124,7 +124,7 @@ absl::StatusOr<std::string> SentencePieceTokenizer::TokenIdsToText(
           "The set of token IDs passed to the tokenizer is part of a BPE "
           "sequence and needs more tokens to be decoded.");
     } else {
-      text += decoded;
+      absl::StrAppend(&text, decoded);
     }
   }
   return text;
