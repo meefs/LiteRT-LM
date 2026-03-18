@@ -126,9 +126,12 @@ class _FunctionTool(Tool):
         parameters["required"].append(name)
 
     return {
-        "name": self._func.__name__,
-        "description": doc.split("\n")[0] if doc else "",
-        "parameters": parameters,
+        "type": "function",
+        "function": {
+            "name": self._func.__name__,
+            "description": doc.split("\n")[0] if doc else "",
+            "parameters": parameters,
+        },
     }
 
   def execute(self, param: collections.abc.Mapping[str, Any]) -> Any:

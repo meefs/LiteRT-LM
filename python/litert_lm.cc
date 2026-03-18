@@ -102,11 +102,8 @@ nlohmann::json HandleToolCalls(const nlohmann::json& response,
 
     tool_responses.push_back({
         {"type", "tool_response"},
-        {"tool_response",
-         {
-             {"name", name},
-             {"response", json_result},
-         }},
+        {"name", name},
+        {"response", json_result},
     });
   }
 
@@ -433,7 +430,7 @@ NB_MODULE(litert_lm_ext, module) {
             }
 
             if (!tools.is_none()) {
-              static const nb::object tool_from_function =
+              nb::object tool_from_function =
                   nb::module_::import_(
                       "litert_lm.python.tools")
                       .attr("tool_from_function");
@@ -442,14 +439,14 @@ NB_MODULE(litert_lm_ext, module) {
               for (auto tool : nb::cast<nb::list>(tools)) {
                 auto tool_obj = tool_from_function(tool);
                 auto description = tool_obj.attr("get_tool_description")();
-                std::string name = nb::cast<std::string>(description["name"]);
+                std::string name =
+                    nb::cast<std::string>(description["function"]["name"]);
                 py_tool_map[name.c_str()] = tool_obj;
                 json_tools.push_back(nb::cast<nlohmann::json>(description));
               }
 
               json_preface.tools = std::move(json_tools);
               has_preface = true;
-              builder.SetEnableConstrainedDecoding(true);
             }
 
             if (has_preface) {

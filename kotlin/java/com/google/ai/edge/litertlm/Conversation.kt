@@ -317,15 +317,11 @@ class Conversation(
       val result = toolManager.execute(functionName, arguments)
       val toolResponseJSONObject =
         JsonObject().apply {
+          addProperty("type", "tool_response")
           addProperty("name", functionName)
           add("response", result)
         }
-      val toolResponseWithTypeJSONObject =
-        JsonObject().apply {
-          addProperty("type", "tool_response")
-          add("tool_response", toolResponseJSONObject)
-        }
-      toolResponsesJSONArray.add(toolResponseWithTypeJSONObject)
+      toolResponsesJSONArray.add(toolResponseJSONObject)
     }
     return JsonObject().apply {
       addProperty("role", "tool")
