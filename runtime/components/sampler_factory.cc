@@ -126,6 +126,22 @@ extern "C" int (*LiteRtTopKMetalSampler_UpdateConfig_Static)(
     const LiteRtTopKSampler_SamplerParameters* sampler_params, int batch_size,
     void* rand_gen_shared_ptr, char** error_msg) = nullptr;
 
+extern "C" int (*LiteRtTopKMetalSampler_CanHandleInput_Static)(
+    LiteRtTopKSampler_Sampler* sampler) = nullptr;
+
+extern "C" int (*LiteRtTopKMetalSampler_HandlesInput_Static)(
+    LiteRtTopKSampler_Sampler* sampler) = nullptr;
+
+extern "C" int (*LiteRtTopKMetalSampler_SetInputTensorsAndInferenceFunc_Static)(
+    LiteRtTopKSampler_Sampler* sampler,
+    LiteRtTensorBuffer absl_nullable ids_tensor,
+    LiteRtTensorBuffer absl_nullable prev_input_positions_tensor,
+    LiteRtTensorBuffer absl_nullable input_positions_tensor,
+    LiteRtTensorBuffer absl_nullable prev_mask_tensor,
+    LiteRtTensorBuffer absl_nullable mask_tensor,
+    int (*run_inference_func)(void* arg), void* arg,
+    char** error_msg) = nullptr;
+
 absl::Status CreateStatus(int error_code, const char* error_msg) {
   absl::StatusCode code = static_cast<absl::StatusCode>(error_code);
   return absl::Status(code, error_msg);
@@ -495,7 +511,10 @@ class TopKMetalCApiSampler : public TopKCApiSampler {
         "libLiteRtTopKMetalSampler.dylib", "LiteRtTopKMetalSampler_Create",
         "LiteRtTopKMetalSampler_Destroy",
         "LiteRtTopKMetalSampler_SampleToIdAndScoreBuffer",
-        "LiteRtTopKMetalSampler_UpdateConfig");
+        "LiteRtTopKMetalSampler_UpdateConfig",
+        "LiteRtTopKMetalSampler_CanHandleInput",
+        "LiteRtTopKMetalSampler_HandlesInput",
+        "LiteRtTopKMetalSampler_SetInputTensorsAndInferenceFunc");
     if (capi_or.ok()) {
       capi = std::move(capi_or.value());
       ABSL_LOG(INFO) << "Dynamically loaded LiteRtTopKMetalSampler C API.";
@@ -536,7 +555,11 @@ class TopKMetalCApiSampler : public TopKCApiSampler {
     if (LiteRtTopKMetalSampler_Create_Static == nullptr ||
         LiteRtTopKMetalSampler_Destroy_Static == nullptr ||
         LiteRtTopKMetalSampler_SampleToIdAndScoreBuffer_Static == nullptr ||
-        LiteRtTopKMetalSampler_UpdateConfig_Static == nullptr) {
+        LiteRtTopKMetalSampler_UpdateConfig_Static == nullptr ||
+        LiteRtTopKMetalSampler_CanHandleInput_Static == nullptr ||
+        LiteRtTopKMetalSampler_HandlesInput_Static == nullptr ||
+        LiteRtTopKMetalSampler_SetInputTensorsAndInferenceFunc_Static ==
+            nullptr) {
       return absl::UnavailableError(
           "Static LiteRtTopKMetalSampler C API not available.");
     }
@@ -544,7 +567,10 @@ class TopKMetalCApiSampler : public TopKCApiSampler {
         /*lib=*/std::nullopt, LiteRtTopKMetalSampler_Create_Static,
         LiteRtTopKMetalSampler_Destroy_Static,
         LiteRtTopKMetalSampler_SampleToIdAndScoreBuffer_Static,
-        LiteRtTopKMetalSampler_UpdateConfig_Static);
+        LiteRtTopKMetalSampler_UpdateConfig_Static,
+        LiteRtTopKMetalSampler_CanHandleInput_Static,
+        LiteRtTopKMetalSampler_HandlesInput_Static,
+        LiteRtTopKMetalSampler_SetInputTensorsAndInferenceFunc_Static);
   }
 };
 

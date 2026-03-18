@@ -148,7 +148,7 @@ args.dst::type result;
       }
       c += "  result" + postfixes[ch] + " = " + param_name + ";\n";
     }
-    c += "  args.dst.Write(result, 0, 0, " + std::to_string(s) + ");\n";
+    c += "  args.dst.Write(result, 0, 0, " + std::to_string(s) + ", 0);\n";
   }
   c += "}\n";
   op.code_ = std::move(c);
@@ -177,6 +177,48 @@ absl::StatusOr<std::unique_ptr<MetalEnv>> CreateMetalEnvFromLiteRtEnv(const Envi
 }
 
 }  // namespace
+
+ml_drift::TensorDescriptor GetTensorDescriptor(const TensorBuffer* tensor_buffer) {
+  if (!tensor_buffer) {
+    return ml_drift::TensorDescriptor();
+  }
+  auto tensor_type_status = tensor_buffer->TensorType();
+  if (!tensor_type_status.HasValue()) {
+    return ml_drift::TensorDescriptor();
+  }
+  const auto& tensor_type = *tensor_type_status;
+  ml_drift::DataType type;
+  if (tensor_type.ElementType() == litert::ElementType::Float32) {
+    type = ml_drift::DataType::FLOAT32;
+  } else if (tensor_type.ElementType() == litert::ElementType::Float16) {
+    type = ml_drift::DataType::FLOAT16;
+  } else if (tensor_type.ElementType() == litert::ElementType::Int32) {
+    type = ml_drift::DataType::INT32;
+  } else {
+    // Unsupported type.
+    return ml_drift::TensorDescriptor();
+  }
+  auto dims = tensor_type.Layout().Dimensions();
+  ml_drift::BHWC shape(
+      dims.size() > 3 ? dims[dims.size() - 4] : 1, dims.size() > 2 ? dims[dims.size() - 3] : 1,
+      dims.size() > 1 ? dims[dims.size() - 2] : 1, dims.size() > 0 ? dims[dims.size() - 1] : 1);
+  ml_drift::TensorDescriptor td(type, ml_drift::TensorStorageType::BUFFER,
+                                shape.b == 1 ? ml_drift::Layout::HWC : ml_drift::Layout::BHWC);
+  td.SetBHWCShape(shape);
+  return td;
+}
+
+absl::Status BindTensor(const TensorBuffer& tensor_buffer, ml_drift::ValueId tensor_id,
+                        ml_drift::metal::InferenceContext& inference_context,
+                        std::vector<ml_drift::metal::MetalSpatialTensor>& shared_tensors) {
+  LITERT_ASSIGN_OR_RETURN(auto metal_buffer_handle, tensor_buffer.GetMetalBuffer());
+  id<MTLBuffer> buffer = (__bridge id<MTLBuffer>)metal_buffer_handle;
+  shared_tensors.push_back(ml_drift::metal::MetalSpatialTensor());
+  auto& shared_tensor = shared_tensors.back();
+  RETURN_IF_ERROR(ml_drift::metal::CreateTensorSharedBuffer(
+      buffer, GetTensorDescriptor(&tensor_buffer), &shared_tensor));
+  return inference_context.SetTensor(tensor_id, &shared_tensor);
+}
 
 // static
 absl::StatusOr<std::unique_ptr<TopKMetalSampler>> TopKMetalSampler::Create(
@@ -343,8 +385,8 @@ absl::Status TopKMetalSampler::SampleToIdAndScoreBuffer(const TensorBuffer& logi
   bool use_zero_copy = false;
 #if LITERT_HAS_METAL_SUPPORT
   auto metal_buffer_handle = logits_tensor.GetMetalBuffer();
-  if (metal_buffer_handle) {
-    id<MTLBuffer> buffer = (__bridge id<MTLBuffer>)*metal_buffer_handle;
+  if (metal_buffer_handle.HasValue()) {
+    id<MTLBuffer> buffer = (__bridge id<MTLBuffer>)metal_buffer_handle.Value();
     if (absl::Status status = ml_drift::metal::CreateTensorSharedBuffer(buffer, logits_tensor_desc_,
                                                                         &shared_logits_tensor);
         status.ok()) {
@@ -383,6 +425,10 @@ absl::Status TopKMetalSampler::SampleToIdAndScoreBuffer(const TensorBuffer& logi
   // Execute sampling
   sampling_->EncodeWithCommandBuffer(command_buffer);
 
+  if (input_handling_ != nullptr) {
+    input_handling_->EncodeWithCommandBuffer(command_buffer);
+  }
+
   // Copy results to staging buffer
   id<MTLBlitCommandEncoder> blit_encoder = [command_buffer blitCommandEncoder];
   [blit_encoder copyFromBuffer:tokens_ids_->GetBufferHandle()
@@ -394,6 +440,14 @@ absl::Status TopKMetalSampler::SampleToIdAndScoreBuffer(const TensorBuffer& logi
 
   // Wait for all GPU work to complete before reading back results
   [command_buffer commit];
+
+  if (input_handling_ != nullptr && run_inference_func_ != nullptr) {
+    int ret = run_inference_func_(run_inference_arg_);
+    if (ret != 0) {
+      return absl::Status(static_cast<absl::StatusCode>(ret), "Failed to run inference.");
+    }
+  }
+
   [command_buffer waitUntilCompleted];
 
   // Download results
@@ -424,6 +478,98 @@ absl::Status TopKMetalSampler::UpdateConfig(const proto::SamplerParameters& samp
     rand_gen_ = rand_gen;
   }
   config_.batch_size = batch_size;
+  return absl::OkStatus();
+}
+
+bool TopKMetalSampler::CanHandleInput() const { return true; }
+
+bool TopKMetalSampler::HandlesInput() const {
+  return input_handling_ != nullptr && run_inference_func_ != nullptr;
+}
+
+absl::Status TopKMetalSampler::SetInputTensorsAndInferenceFunc(
+    const TensorBuffer* ids_tensor, const TensorBuffer* prev_input_positions_tensor,
+    const TensorBuffer* input_positions_tensor, const TensorBuffer* prev_mask_tensor,
+    const TensorBuffer* mask_tensor, int (*run_inference_func)(void* arg), void* arg) {
+  if (run_inference_func == nullptr) {
+    run_inference_func_ = nullptr;
+    run_inference_arg_ = nullptr;
+    return absl::OkStatus();
+  }
+
+  LITERT_RETURN_IF_ERROR(ids_tensor != nullptr);
+  LITERT_RETURN_IF_ERROR(prev_input_positions_tensor != nullptr);
+  LITERT_RETURN_IF_ERROR(input_positions_tensor != nullptr);
+  if (mask_tensor == nullptr) {
+    LITERT_RETURN_IF_ERROR(prev_mask_tensor == nullptr);
+  } else {
+    LITERT_RETURN_IF_ERROR(prev_mask_tensor != nullptr);
+  }
+
+  if (input_handling_ == nullptr) {
+    ml_drift::GpuModelBuilder::TensorHandle last_output_token_handle;
+    ml_drift::GpuModelBuilder::TensorHandle input_token_handle;
+    ml_drift::GpuModelBuilder::TensorHandle prev_input_position_handle;
+    ml_drift::GpuModelBuilder::TensorHandle input_position_handle;
+    ml_drift::GpuModelBuilder::TensorHandle prev_mask_handle;
+    ml_drift::GpuModelBuilder::TensorHandle mask_handle;
+    ASSIGN_OR_RETURN(
+        auto input_handling_model,
+        CreateInputHandlingModel(tokens_ids_->GetDescriptor(), GetTensorDescriptor(ids_tensor),
+                                 GetTensorDescriptor(input_positions_tensor),
+                                 GetTensorDescriptor(mask_tensor), &last_output_token_handle,
+                                 &input_token_handle, &prev_input_position_handle,
+                                 &input_position_handle, mask_tensor ? &prev_mask_handle : nullptr,
+                                 mask_tensor ? &mask_handle : nullptr));
+
+    ml_drift::CreateGpuModelInfo input_handling_create_info = create_info_;
+    input_handling_create_info.external_immutable_tensors.clear();
+    input_handling_create_info.external_mutable_tensors.clear();
+    input_handling_create_info.external_mutable_tensors[last_output_token_handle.id] =
+        last_output_token_handle.tensor_desc;
+    input_handling_create_info.external_mutable_tensors[input_token_handle.id] =
+        input_token_handle.tensor_desc;
+    input_handling_create_info.external_mutable_tensors[prev_input_position_handle.id] =
+        prev_input_position_handle.tensor_desc;
+    input_handling_create_info.external_mutable_tensors[input_position_handle.id] =
+        input_position_handle.tensor_desc;
+    if (mask_tensor) {
+      input_handling_create_info.external_mutable_tensors[prev_mask_handle.id] =
+          prev_mask_handle.tensor_desc;
+      input_handling_create_info.external_mutable_tensors[mask_handle.id] = mask_handle.tensor_desc;
+    }
+
+    auto input_handling =
+        std::make_unique<ml_drift::metal::InferenceContext>(ml_drift::metal::InferenceContext());
+    RETURN_IF_ERROR(input_handling->InitFromGpuModel(input_handling_create_info,
+                                                     &input_handling_model, env_->device()));
+    input_handling_ = std::move(input_handling);
+    input_handling_ids_ = {last_output_token_handle.id, input_token_handle.id,
+                           prev_input_position_handle.id, input_position_handle.id};
+    if (mask_tensor) {
+      input_handling_ids_.push_back(prev_mask_handle.id);
+      input_handling_ids_.push_back(mask_handle.id);
+    }
+  }
+
+  shared_tensors_.clear();
+  shared_tensors_.reserve(mask_tensor != nullptr ? 5 : 3);
+  RETURN_IF_ERROR(input_handling_->SetTensor(input_handling_ids_[0], tokens_ids_.get()));
+  RETURN_IF_ERROR(
+      BindTensor(*ids_tensor, input_handling_ids_[1], *input_handling_, shared_tensors_));
+  RETURN_IF_ERROR(BindTensor(*prev_input_positions_tensor, input_handling_ids_[2], *input_handling_,
+                             shared_tensors_));
+  RETURN_IF_ERROR(BindTensor(*input_positions_tensor, input_handling_ids_[3], *input_handling_,
+                             shared_tensors_));
+  if (mask_tensor != nullptr && input_handling_ids_.size() > 4) {
+    RETURN_IF_ERROR(
+        BindTensor(*prev_mask_tensor, input_handling_ids_[4], *input_handling_, shared_tensors_));
+    RETURN_IF_ERROR(
+        BindTensor(*mask_tensor, input_handling_ids_[5], *input_handling_, shared_tensors_));
+  }
+  run_inference_func_ = run_inference_func;
+  run_inference_arg_ = arg;
+
   return absl::OkStatus();
 }
 
@@ -522,6 +668,66 @@ int LiteRtTopKMetalSampler_UpdateConfig(
   return 0;
 }
 
+int LiteRtTopKMetalSampler_CanHandleInput(LiteRtTopKMetalSampler_Sampler* sampler) {
+  if (!sampler) {
+    return false;
+  }
+  auto cpp_sampler = reinterpret_cast<litert::lm::TopKMetalSampler*>(sampler);
+  return cpp_sampler->CanHandleInput();
+}
+
+int LiteRtTopKMetalSampler_HandlesInput(LiteRtTopKMetalSampler_Sampler* sampler) {
+  if (!sampler) {
+    return false;
+  }
+  auto cpp_sampler = reinterpret_cast<litert::lm::TopKMetalSampler*>(sampler);
+  return cpp_sampler->HandlesInput();
+}
+
+int LiteRtTopKMetalSampler_SetInputTensorsAndInferenceFunc(
+    LiteRtTopKMetalSampler_Sampler* sampler, LiteRtTensorBuffer ids_tensor,
+    LiteRtTensorBuffer prev_input_positions_tensor, LiteRtTensorBuffer input_positions_tensor,
+    LiteRtTensorBuffer prev_mask_tensor, LiteRtTensorBuffer mask_tensor,
+    int (*run_inference_func)(void* arg), void* arg, char** error_msg) {
+  if (!sampler) {
+    SAMPLER_RETURN_AND_SET_ERROR_IF_NOT_OK(absl::InvalidArgumentError("Sampler not provided."),
+                                           error_msg);
+  }
+  auto cpp_sampler = reinterpret_cast<litert::lm::TopKMetalSampler*>(sampler);
+  litert::TensorBuffer cpp_ids_tensor;
+  if (ids_tensor) {
+    cpp_ids_tensor = litert::TensorBuffer::WrapCObject(ids_tensor, litert::OwnHandle::kNo);
+  }
+  litert::TensorBuffer cpp_prev_input_positions_tensor;
+  if (prev_input_positions_tensor) {
+    cpp_prev_input_positions_tensor =
+        litert::TensorBuffer::WrapCObject(prev_input_positions_tensor, litert::OwnHandle::kNo);
+  }
+  litert::TensorBuffer cpp_input_positions_tensor;
+  if (input_positions_tensor) {
+    cpp_input_positions_tensor =
+        litert::TensorBuffer::WrapCObject(input_positions_tensor, litert::OwnHandle::kNo);
+  }
+  litert::TensorBuffer cpp_prev_mask_tensor;
+  if (prev_mask_tensor) {
+    cpp_prev_mask_tensor =
+        litert::TensorBuffer::WrapCObject(prev_mask_tensor, litert::OwnHandle::kNo);
+  }
+  litert::TensorBuffer cpp_mask_tensor;
+  if (mask_tensor) {
+    cpp_mask_tensor = litert::TensorBuffer::WrapCObject(mask_tensor, litert::OwnHandle::kNo);
+  }
+  SAMPLER_RETURN_AND_SET_ERROR_IF_NOT_OK(
+      cpp_sampler->SetInputTensorsAndInferenceFunc(
+          ids_tensor ? &cpp_ids_tensor : nullptr,
+          prev_input_positions_tensor ? &cpp_prev_input_positions_tensor : nullptr,
+          input_positions_tensor ? &cpp_input_positions_tensor : nullptr,
+          prev_mask_tensor ? &cpp_prev_mask_tensor : nullptr,
+          mask_tensor ? &cpp_mask_tensor : nullptr, run_inference_func, arg),
+      error_msg);
+  return 0;
+}
+
 #if defined(LITERT_LM_USE_STATIC_LINKED_GPU_SAMPLER)
 // Function pointers defined in sampler_factory.cc.
 extern "C" int (*LiteRtTopKMetalSampler_Create_Static)(
@@ -541,6 +747,18 @@ extern "C" int (*LiteRtTopKMetalSampler_UpdateConfig_Static)(
     const LiteRtTopKMetalSampler_SamplerParameters* sampler_params, int batch_size,
     void* rand_gen_shared_ptr, char** error_msg);
 
+extern "C" int (*LiteRtTopKMetalSampler_CanHandleInput_Static)(
+    LiteRtTopKMetalSampler_Sampler* sampler);
+
+extern "C" int (*LiteRtTopKMetalSampler_HandlesInput_Static)(
+    LiteRtTopKMetalSampler_Sampler* sampler);
+
+extern "C" int (*LiteRtTopKMetalSampler_SetInputTensorsAndInferenceFunc_Static)(
+    LiteRtTopKMetalSampler_Sampler* sampler, LiteRtTensorBuffer ids_tensor,
+    LiteRtTensorBuffer prev_input_positions_tensor, LiteRtTensorBuffer input_positions_tensor,
+    LiteRtTensorBuffer prev_mask_tensor, LiteRtTensorBuffer mask_tensor,
+    int (*run_inference_func)(void* arg), void* arg, char** error_msg);
+
 namespace {
 
 // Used for C API static linking.
@@ -553,6 +771,10 @@ class StaticMetalSamplerInitializer {
     LiteRtTopKMetalSampler_SampleToIdAndScoreBuffer_Static =
         &LiteRtTopKMetalSampler_SampleToIdAndScoreBuffer;
     LiteRtTopKMetalSampler_UpdateConfig_Static = &LiteRtTopKMetalSampler_UpdateConfig;
+    LiteRtTopKMetalSampler_CanHandleInput_Static = &LiteRtTopKMetalSampler_CanHandleInput;
+    LiteRtTopKMetalSampler_HandlesInput_Static = &LiteRtTopKMetalSampler_HandlesInput;
+    LiteRtTopKMetalSampler_SetInputTensorsAndInferenceFunc_Static =
+        &LiteRtTopKMetalSampler_SetInputTensorsAndInferenceFunc;
   }
 };
 

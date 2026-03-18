@@ -104,6 +104,15 @@ class TopKMetalSampler : public TopKGpuSampler {
                             int batch_size,
                             std::shared_ptr<std::default_random_engine>
                                 rand_gen) override;
+  bool CanHandleInput() const override;
+  bool HandlesInput() const override;
+  absl::Status SetInputTensorsAndInferenceFunc(
+      const TensorBuffer* ids_tensor,
+      const TensorBuffer* prev_input_positions_tensor,
+      const TensorBuffer* input_positions_tensor,
+      const TensorBuffer* prev_mask_tensor,
+      const TensorBuffer* mask_tensor,
+      int (*run_inference_func)(void* arg), void* arg) override;
 
  private:
   struct TransformerParams {
