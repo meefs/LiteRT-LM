@@ -2,14 +2,14 @@
 
 workspace(name = "litert_lm")
 
-# UPDATED = 2026-03-12
-LITERT_REF = "cffc0726790d3dd2c143820b595dc90eb7486409"
+# UPDATED = 2026-03-23
+LITERT_REF = "f6c0f3b1bcde9bc2047c9e753d3c4236ee0f3749"
 
-LITERT_SHA256 = "3f86aac99cb6128ba40b072a8aa0ceb2a3b3283b25ea831dc09304c3b68c41a8"
+LITERT_SHA256 = "72178d25fa288588cd5c238ef68257827ed3e1c8a544e6b8c22454a35aaef7f4"
 
-TENSORFLOW_REF = "72ce5b574a34fe532b23a4287202d088ce13ad93"
+TENSORFLOW_REF = "a6ec4c6cf299bc8df855a758f5f438cc36c95e2f"
 
-TENSORFLOW_SHA256 = "7bbe1701fd4f237aaf27396d4b64cce28a55b35436ca2911adb6205d5eadb36f"
+TENSORFLOW_SHA256 = "7f51610cd10495d118be9422bf8d654f66290dd52b298307a1f78edf43d74550"
 
 # buildifier: disable=load-on-top
 
@@ -332,14 +332,6 @@ http_archive(
     sha256 = "9970f0a0afee1648890293321665e5b2efa04eaec9f1671fcf8048f456f5bb86",
     strip_prefix = "sentencepiece-0.2.0/src",
     url = "https://github.com/google/sentencepiece/archive/refs/tags/v0.2.0.tar.gz",
-)
-
-http_archive(
-    name = "darts_clone",
-    build_file = "@//:BUILD.darts_clone",
-    sha256 = "4a562824ec2fbb0ef7bd0058d9f73300173d20757b33bb69baa7e50349f65820",
-    strip_prefix = "darts-clone-e40ce4627526985a7767444b6ed6893ab6ff8983",
-    url = "https://github.com/s-yata/darts-clone/archive/e40ce4627526985a7767444b6ed6893ab6ff8983.tar.gz",
 )
 
 http_archive(
