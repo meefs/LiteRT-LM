@@ -27,6 +27,11 @@ pytype_strict_library(
     imports = [".."],
 )
 
+pytype_strict_library(
+    name = "venv_manager",
+    srcs = ["venv_manager.py"],
+)
+
 pytype_strict_binary(
     name = "litert-lm",
     srcs = ["main.py"],
@@ -38,6 +43,7 @@ pytype_strict_binary(
     ],
     deps = [
         ":model",
+        ":venv_manager",
         "//python/litert_lm",
         requirement("fire"),
     ],
@@ -91,6 +97,7 @@ py_wheel(
         "//conditions:default": ["litert-lm"],
     }) + [
         "fire",
+        "litert-torch-nightly",
     ],
     deps = [":litert_lm_cli_pkg"],
 )

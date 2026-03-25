@@ -18,60 +18,16 @@ import datetime
 import os
 import shutil
 import subprocess
-import sys
 
 import fire
 
 import litert_lm
 from litert_lm_cli import model
-
-
-VENV_DIR = os.path.expanduser("~/.litert-lm/.venv")
-LITERT_TORCH_BIN = os.path.join(VENV_DIR, "bin", "litert-torch")
-UV_BIN = os.path.join(VENV_DIR, "bin", "uv")
+from litert_lm_cli import venv_manager
 
 
 class LiteRTLMCLI:
   """CLI tool for LiteRT-LM models."""
-
-  def _ensure_venv(self):
-    """Ensures that the virtual environment exists."""
-    if os.path.exists(LITERT_TORCH_BIN):
-      return
-
-    if not os.path.exists(VENV_DIR):
-      print(f"Creating virtual environment in {VENV_DIR}...")
-      os.makedirs(os.path.dirname(VENV_DIR), exist_ok=True)
-      python_exe = sys.executable or "python3"
-      subprocess.run([python_exe, "-m", "venv", VENV_DIR], check=True)
-
-    if not os.path.exists(UV_BIN):
-      print("Installing uv into the virtual environment...")
-      subprocess.run(
-          [
-              os.path.join(VENV_DIR, "bin", "pip"),
-              "install",
-              "uv",
-              "-i",
-              "https://pypi.org/simple",
-          ],
-          check=True,
-      )
-
-    print("Installing litert-torch with uv...")
-    subprocess.run(
-        [
-            UV_BIN,
-            "pip",
-            "install",
-            "-i",
-            "https://pypi.org/simple",
-            "litert-torch-nightly",
-            "--python",
-            os.path.join(VENV_DIR, "bin", "python"),
-        ],
-        check=True,
-    )
 
   def convert(self, source, model_id=None, **kwargs):
     """Converts a HuggingFace model to LiteRT-LM format.
@@ -102,13 +58,13 @@ class LiteRTLMCLI:
       )
       return
 
-    self._ensure_venv()
+    venv_manager.ensure_binary(venv_manager.LITERT_TORCH_BIN)
 
     output_dir = model.get_model_dir(effective_model_id)
     os.makedirs(output_dir, exist_ok=True)
 
     cmd = [
-        LITERT_TORCH_BIN,
+        venv_manager.LITERT_TORCH_BIN,
         "export_hf",
         "--model",
         source,
