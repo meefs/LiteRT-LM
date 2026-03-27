@@ -183,9 +183,9 @@ class LiteRTLMCLI:
       model_reference: str,
       prefill_tokens: int = 256,
       decode_tokens: int = 256,
-      android: bool = False,
       backend: str = "cpu",
       verbose: bool = False,
+      **kwargs,
   ):
     """Benchmarks a LiteRT-LM model.
 
@@ -194,10 +194,11 @@ class LiteRTLMCLI:
         a model ID from `litert-lm list`.
       prefill_tokens: The number of tokens to prefill.
       decode_tokens: The number of tokens to decode.
-      android: Whether to run the benchmark on an Android device via ADB.
       backend: The backend to use (cpu or gpu).
       verbose: Whether to enable verbose logging.
+      **kwargs: Additional arguments.
     """
+    android = kwargs.get("android", False)
     if verbose:
       litert_lm.set_min_log_severity(litert_lm.LogSeverity.VERBOSE)
 
@@ -213,10 +214,10 @@ class LiteRTLMCLI:
       self,
       model_reference,
       prompt=None,
-      android=False,
       backend="cpu",
       preset=None,
       verbose=False,
+      **kwargs,
   ):
     r'''Runs a LiteRT-LM model interactively or with a single prompt.
 
@@ -238,12 +239,13 @@ class LiteRTLMCLI:
         the reference looks like a HuggingFace repository ID (e.g.,
         "google/gemma-3-1b-it"), an automatic conversion will be attempted.
       prompt: A single prompt to run once and exit.
-      android: Whether to run the model on an Android device via ADB.
       backend: The backend to use (cpu or gpu).
       preset: Path to a Python file containing tool functions and system
         instructions.
       verbose: Whether to enable verbose logging.
+      **kwargs: Additional arguments.
     '''
+    android = kwargs.get("android", False)
     if verbose:
       litert_lm.set_min_log_severity(litert_lm.LogSeverity.VERBOSE)
 

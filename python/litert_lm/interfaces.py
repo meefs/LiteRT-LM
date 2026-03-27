@@ -29,7 +29,6 @@ class Backend(enum.Enum):
   UNSPECIFIED = 0
   CPU = 3
   GPU = 4
-  NPU = 6
 
 
 class ToolEventHandler(abc.ABC):
