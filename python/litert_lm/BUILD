@@ -91,9 +91,9 @@ pytype_strict_library(
         "litert_lm_ext.py",
     ],
     data = [":litert_lm_ext.so"] + select({
-        "@platforms//os:macos": [":copy_gemma_model_constraint_provider_dylib"],
+        "@platforms//os:macos": [":copy_prebuilt_libs_dylib"],
         "@platforms//os:windows": [], # the cc_binary rule already properly provisions this DLL into the package directory on Windows.
-        "//conditions:default": [":copy_gemma_model_constraint_provider_so"],
+        "//conditions:default": [":copy_prebuilt_libs_so"],
     }),
     deps = [
         ":interfaces",
@@ -130,31 +130,62 @@ load("@rules_python//python:packaging.bzl", "py_package", "py_wheel")
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("//:version.bzl", "VERSION")
 
+_PREBUILT_LIBS = [
+    "libGemmaModelConstraintProvider",
+    "libLiteRtWebGpuAccelerator",
+    "libLiteRtTopKWebGpuSampler",
+    "libLiteRt",
+]
+
 config_setting(
     name = "is_nightly",
     define_values = {"PYPI_NIGHTLY": "1"},
 )
 
 genrule(
-    name = "copy_gemma_model_constraint_provider_so",
+    name = "copy_prebuilt_libs_so",
     srcs = select({
-        "//build_config:linux_x86_64": ["//prebuilt/linux_x86_64:libGemmaModelConstraintProvider.so"],
-        "//build_config:linux_arm64": ["//prebuilt/linux_arm64:libGemmaModelConstraintProvider.so"],
+        "//build_config:linux_x86_64": ["//prebuilt/linux_x86_64:" + lib + ".so" for lib in _PREBUILT_LIBS],
+        "//build_config:linux_arm64": ["//prebuilt/linux_arm64:" + lib + ".so" for lib in _PREBUILT_LIBS],
         "//conditions:default": [],
     }),
-    outs = ["libGemmaModelConstraintProvider.so"],
-    cmd = "if [ -n \"$(SRCS)\" ]; then cp $< $@; else touch $@; fi",
+    outs = [lib + ".so" for lib in _PREBUILT_LIBS],
+    cmd = """
+        SRCS_ARRAY=($(SRCS))
+        OUTS_ARRAY=($(OUTS))
+        if [ $${#SRCS_ARRAY[@]} -gt 0 ]; then
+            for i in $${!SRCS_ARRAY[@]}; do
+                cp $${SRCS_ARRAY[$$i]} $${OUTS_ARRAY[$$i]}
+            done
+        else
+            for out in $${OUTS_ARRAY[@]}; do
+                touch $$out
+            done
+        fi
+    """,
     tags = ["manual"],
 )
 
 genrule(
-    name = "copy_gemma_model_constraint_provider_dylib",
+    name = "copy_prebuilt_libs_dylib",
     srcs = select({
-        "@platforms//os:macos": ["//prebuilt/macos_arm64:libGemmaModelConstraintProvider.dylib"],
+        "@platforms//os:macos": ["//prebuilt/macos_arm64:" + lib + ".dylib" for lib in _PREBUILT_LIBS],
         "//conditions:default": [],
     }),
-    outs = ["libGemmaModelConstraintProvider.dylib"],
-    cmd = "if [ -n \"$(SRCS)\" ]; then cp $< $@; else touch $@; fi",
+    outs = [lib + ".dylib" for lib in _PREBUILT_LIBS],
+    cmd = """
+        SRCS_ARRAY=($(SRCS))
+        OUTS_ARRAY=($(OUTS))
+        if [ $${#SRCS_ARRAY[@]} -gt 0 ]; then
+            for i in $${!SRCS_ARRAY[@]}; do
+                cp $${SRCS_ARRAY[$$i]} $${OUTS_ARRAY[$$i]}
+            done
+        else
+            for out in $${OUTS_ARRAY[@]}; do
+                touch $$out
+            done
+        fi
+    """,
     tags = ["manual"],
 )
 
