@@ -47,11 +47,9 @@ constexpr bool kEnableMtpDrafterLogs = false;
 
 constexpr absl::string_view kVerifySignatureRunner = "verify";
 
-absl::StatusOr<std::unique_ptr<Sampler>> CreateGreedySampler(Environment& env,
-                                                             int output_heads,
-                                                             int sequence_size,
-                                                             int vocab_size,
-                                                             Backend backend) {
+absl::StatusOr<std::unique_ptr<Sampler>> CreateGreedySampler(
+    Environment& env, Backend backend, int output_heads, int sequence_size,
+    int vocab_size, std::optional<ActivationDataType> activation_data_type) {
   proto::SamplerParameters sampler_params;
   sampler_params.set_type(proto::SamplerParameters::TOP_P);
   sampler_params.set_k(1);
@@ -59,7 +57,8 @@ absl::StatusOr<std::unique_ptr<Sampler>> CreateGreedySampler(Environment& env,
   sampler_params.set_temperature(1.0f);
   sampler_params.set_seed(0);
   return CreateSampler(backend, output_heads, std::move(sampler_params),
-                       env.Get(), sequence_size, vocab_size);
+                       env.Get(), sequence_size, vocab_size,
+                       activation_data_type);
 }
 
 absl::Status ConcatenateEmbeddingsAndActivations(
@@ -180,9 +179,13 @@ LlmLiteRtMtpDrafter::Create(Environment& env, ModelResources& resources,
     }
   }
 
+  ActivationDataType activation_data_type =
+      executor_settings.GetActivationDataType().value_or(
+          ActivationDataType::FLOAT16);
+
   ASSIGN_OR_RETURN(
       auto compilation_options,
-      CreateCompilationOptions(executor_settings, ActivationDataType::FLOAT32,
+      CreateCompilationOptions(executor_settings, activation_data_type,
                                /*signatures=*/std::nullopt,
                                /*cache_suffix=*/".mtp_drafter"));
   RETURN_IF_ERROR(
@@ -256,15 +259,17 @@ LlmLiteRtMtpDrafter::Create(Environment& env, ModelResources& resources,
   LITERT_ASSIGN_OR_RETURN(
       int vocab_size,
       GetVocabSizeFromLogitsTensor(verifier_output_buffers["logits"]));
-  ASSIGN_OR_RETURN(
-      auto drafter_sampler,
-      CreateGreedySampler(env, /*output_heads=*/1, /*sequence_size=*/1,
-                          vocab_size, executor_settings.GetBackend()));
-  ASSIGN_OR_RETURN(
-      auto verifier_sampler,
-      CreateGreedySampler(env, /*output_heads=*/1,
-                          /*sequence_size=*/num_draft_steps + 1, vocab_size,
-                          executor_settings.GetBackend()));
+
+  ASSIGN_OR_RETURN(auto drafter_sampler,
+                   CreateGreedySampler(env, executor_settings.GetBackend(),
+                                       /*output_heads=*/1,
+                                       /*sequence_size=*/1, vocab_size,
+                                       activation_data_type));
+  ASSIGN_OR_RETURN(auto verifier_sampler,
+                   CreateGreedySampler(env, executor_settings.GetBackend(),
+                                       /*output_heads=*/1,
+                                       /*sequence_size=*/num_draft_steps + 1,
+                                       vocab_size, activation_data_type));
 
   return absl::WrapUnique(new LlmLiteRtMtpDrafter(
       std::move(compiled_model), std::move(base_model),
