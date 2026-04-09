@@ -311,7 +311,12 @@ cc_test(
     data = [
         "//runtime/testdata",
     ],
-    tags = ["requires-gpu-nvidia"],
+    tags = [
+        "noasan",
+        "nomsan",
+        "notsan",
+        "requires-gpu-nvidia",
+    ],
     deps = [
         ":default_static_gpu_accelerator",
         ":executor_settings_base",
