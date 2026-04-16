@@ -308,13 +308,13 @@ class GeminiHandler(http.server.BaseHTTPRequestHandler):
           pass
 
 
-def run_server(port: int):
+def run_server(host: str, port: int):
   """Starts the HTTP server."""
-  server_address = ("localhost", port)
+  server_address = (host, port)
   httpd = http.server.HTTPServer(server_address, GeminiHandler)
   click.echo(
       click.style(
-          f"Starting LiteRT-LM Gemini API server on port {port}...",
+          f"Starting LiteRT-LM Gemini API server on {host}:{port}...",
           fg="green",
           bold=True,
       )
@@ -335,17 +335,21 @@ def register(cli):
       help="Start a server with a Gemini compatible API (alpha feature)"
   )
   @click.option(
+      "--host", "-h", default="localhost", type=str, help="Host to listen on"
+  )
+  @click.option(
       "--port", "-p", default=9379, type=int, help="Port to listen on"
   )
   @click.option("--verbose", is_flag=True, help="Enable verbose logging")
-  def serve(port: int, verbose: bool):
+  def serve(host: str, port: int, verbose: bool):
     """Starts a local HTTP server speaking the Gemini API protocol.
 
     Args:
+      host: Host to listen on.
       port: Port to listen on.
       verbose: Whether to enable verbose logging.
     """
     if verbose:
       litert_lm.set_min_log_severity(litert_lm.LogSeverity.VERBOSE)
 
-    run_server(port)
+    run_server(host, port)
