@@ -292,9 +292,15 @@ cc_test(
 
 cc_library(
     name = "logging",
+    srcs = ["logging.cc"],
     hdrs = ["logging.h"],
     deps = [
+        "@com_google_absl//absl/base:log_severity",
+        "@com_google_absl//absl/base:no_destructor",
+        "@com_google_absl//absl/log:globals",
         "@com_google_absl//absl/strings",
+        "@litert//litert/c/internal:litert_logging",
+        "@litert//tflite:minimal_logging",
     ],
 )
 

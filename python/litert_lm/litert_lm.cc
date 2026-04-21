@@ -55,6 +55,7 @@
 #include "runtime/executor/executor_settings_base.h"
 #include "runtime/executor/llm_executor_settings.h"
 #include "runtime/proto/token.pb.h"
+#include "runtime/util/logging.h"
 #include "tflite/logger.h"  // from @litert
 #include "tflite/minimal_logging.h"  // from @litert
 
@@ -231,17 +232,6 @@ nb::object ToPyResponses(const Responses& responses) {
   auto token_lengths = responses.GetTokenLengths().value_or(std::vector<int>());
   return py_responses_class(texts, scores, token_lengths);
 }
-
-// Note: Consider move to C++ API.
-enum class LogSeverity {
-  kVerbose = 0,
-  kDebug = 1,
-  kInfo = 2,
-  kWarning = 3,
-  kError = 4,
-  kFatal = 5,
-  kSilent = 1000,
-};
 
 // MessageIterator bridges the asynchronous, callback-based C++ API
 // (Conversation::SendMessageAsync) to Python's synchronous iterator protocol
@@ -559,49 +549,7 @@ NB_MODULE(litert_lm_ext, module) {
 
   module.def(
       "set_min_log_severity",
-      [](LogSeverity log_severity) {
-        struct SeverityMapping {
-          absl::LogSeverityAtLeast absl_severity;
-          LiteRtLogSeverity litert_severity;
-          tflite::LogSeverity tflite_severity;
-        };
-
-        static const std::map<LogSeverity, SeverityMapping> mapping = {
-            {LogSeverity::kVerbose,
-             {absl::LogSeverityAtLeast::kInfo, kLiteRtLogSeverityVerbose,
-              tflite::TFLITE_LOG_VERBOSE}},
-            {LogSeverity::kDebug,
-             {absl::LogSeverityAtLeast::kInfo, kLiteRtLogSeverityDebug,
-              tflite::TFLITE_LOG_VERBOSE}},
-            {LogSeverity::kInfo,
-             {absl::LogSeverityAtLeast::kInfo, kLiteRtLogSeverityInfo,
-              tflite::TFLITE_LOG_INFO}},
-            {LogSeverity::kWarning,
-             {absl::LogSeverityAtLeast::kWarning, kLiteRtLogSeverityWarning,
-              tflite::TFLITE_LOG_WARNING}},
-            {LogSeverity::kError,
-             {absl::LogSeverityAtLeast::kError, kLiteRtLogSeverityError,
-              tflite::TFLITE_LOG_ERROR}},
-            {LogSeverity::kFatal,
-             {absl::LogSeverityAtLeast::kFatal, kLiteRtLogSeverityError,
-              tflite::TFLITE_LOG_ERROR}},
-            {LogSeverity::kSilent,
-             {absl::LogSeverityAtLeast::kInfinity, kLiteRtLogSeveritySilent,
-              tflite::TFLITE_LOG_SILENT}},
-        };
-
-        auto mapping_it = mapping.find(log_severity);
-        const SeverityMapping& severity_mapping =
-            (mapping_it != mapping.end()) ? mapping_it->second
-                                          : mapping.at(LogSeverity::kSilent);
-
-        absl::SetMinLogLevel(severity_mapping.absl_severity);
-        absl::SetStderrThreshold(severity_mapping.absl_severity);
-        LiteRtSetMinLoggerSeverity(LiteRtGetDefaultLogger(),
-                                   severity_mapping.litert_severity);
-        tflite::logging_internal::MinimalLogger::SetMinimumLogSeverity(
-            severity_mapping.tflite_severity);
-      },
+      [](LogSeverity log_severity) { SetMinLogSeverity(log_severity); },
       nb::arg("log_severity"));
 
   nb::class_<Engine>(module, "_Engine", nb::dynamic_attr())

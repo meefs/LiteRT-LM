@@ -84,6 +84,7 @@ cc_binary(
         "//runtime/executor:executor_settings_base",
         "//runtime/executor:llm_executor_settings",
         "//runtime/proto:token_cc_proto",
+        "//runtime/util:logging",
         "@rules_python//python/cc:current_py_cc_headers",  # buildcleaner: keep
         "@litert//tflite:minimal_logging",
     ],

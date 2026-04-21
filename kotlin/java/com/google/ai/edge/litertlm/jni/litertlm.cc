@@ -40,6 +40,7 @@
 #include "runtime/executor/executor_settings_base.h"
 #include "runtime/executor/llm_executor_settings.h"
 #include "runtime/proto/sampler_params.pb.h"
+#include "runtime/util/logging.h"
 #include "tflite/logger.h"  // from @litert
 #include "tflite/minimal_logging.h"  // from @litert
 
@@ -333,57 +334,8 @@ Java_com_google_ai_edge_litertlm_NativeLibraryLoader_nativeCheckLoaded(
 
 LITERTLM_JNIEXPORT void JNICALL JNI_METHOD(nativeSetMinLogSeverity)(
     JNIEnv* env, jclass thiz, jint log_severity) {
-  absl::LogSeverityAtLeast absl_log_severity;
-  LiteRtLogSeverity litert_log_severity;
-  tflite::LogSeverity tflite_log_severity;
-
-  switch (log_severity) {
-    case 0:  // verbose
-      absl_log_severity = absl::LogSeverityAtLeast::kInfo;
-      litert_log_severity = kLiteRtLogSeverityVerbose;
-      tflite_log_severity = tflite::TFLITE_LOG_VERBOSE;
-      break;
-    case 1:  // debug
-      absl_log_severity = absl::LogSeverityAtLeast::kInfo;
-      litert_log_severity = kLiteRtLogSeverityDebug;
-      tflite_log_severity = tflite::TFLITE_LOG_VERBOSE;
-      break;
-    case 2:  // info
-      absl_log_severity = absl::LogSeverityAtLeast::kInfo;
-      litert_log_severity = kLiteRtLogSeverityInfo;
-      tflite_log_severity = tflite::TFLITE_LOG_INFO;
-      break;
-    case 3:  // warning
-      absl_log_severity = absl::LogSeverityAtLeast::kWarning;
-      litert_log_severity = kLiteRtLogSeverityWarning;
-      tflite_log_severity = tflite::TFLITE_LOG_WARNING;
-      break;
-    case 4:  // error
-      absl_log_severity = absl::LogSeverityAtLeast::kError;
-      litert_log_severity = kLiteRtLogSeverityError;
-      tflite_log_severity = tflite::TFLITE_LOG_ERROR;
-      break;
-    case 5:  // fatal
-      absl_log_severity = absl::LogSeverityAtLeast::kFatal;
-      litert_log_severity = kLiteRtLogSeverityError;
-      tflite_log_severity = tflite::TFLITE_LOG_ERROR;
-      break;
-    default:  // infinity
-      absl_log_severity = absl::LogSeverityAtLeast::kInfinity;
-      litert_log_severity = kLiteRtLogSeveritySilent;
-      tflite_log_severity = tflite::TFLITE_LOG_SILENT;
-      break;
-  }
-
-  // Update the absl logging framework, used by LiteRT-LM.
-  absl::SetMinLogLevel(absl_log_severity);
-
-  // Update the logging framework of LiteRT.
-  LiteRtSetMinLoggerSeverity(LiteRtGetDefaultLogger(), litert_log_severity);
-
-  // Update the logging framework of TFLite.
-  tflite::logging_internal::MinimalLogger::SetMinimumLogSeverity(
-      tflite_log_severity);
+  litert::lm::SetMinLogSeverity(
+      static_cast<litert::lm::LogSeverity>(log_severity));
 }
 
 LITERTLM_JNIEXPORT jlong JNICALL JNI_METHOD(nativeCreateEngine)(
