@@ -281,6 +281,46 @@ LiteRtLmSession* litert_lm_engine_create_session(LiteRtLmEngine* engine,
 LITERT_LM_C_API_EXPORT
 void litert_lm_session_delete(LiteRtLmSession* session);
 
+// Adds the input prompt/query to the model for starting the prefilling
+// process. This is a blocking call and the function will return when the
+// prefill process is done.
+//
+// @param session The session to use.
+// @param inputs An array of InputData structs representing the multimodal
+//   input.
+// @param num_inputs The number of InputData structs in the array.
+// @return 0 on success, non-zero on failure.
+LITERT_LM_C_API_EXPORT
+int litert_lm_session_run_prefill(LiteRtLmSession* session,
+                                  const LiteRtLmInputData* inputs,
+                                  size_t num_inputs);
+
+// Starts the decoding process for the model to predict the response based
+// on the input prompt/query added after using litert_lm_session_run_prefill.
+// This is a blocking call and the function will return when the decoding
+// process is done.
+//
+// @param session The session to use.
+// @return A pointer to the responses, or NULL on failure. The caller is
+//   responsible for deleting the responses using `litert_lm_responses_delete`.
+LITERT_LM_C_API_EXPORT
+LiteRtLmResponses* litert_lm_session_run_decode(LiteRtLmSession* session);
+
+// Scores the target text after the prefill process is done.
+//
+// @param session The session to use.
+// @param target_text An array of target text strings to score.
+// @param num_targets The number of strings in the target_text array.
+// @param store_token_lengths Whether to store the token lengths of the target
+//   texts in the responses.
+// @return A pointer to the responses, or NULL on failure. The caller is
+//   responsible for deleting the responses using `litert_lm_responses_delete`.
+LITERT_LM_C_API_EXPORT
+LiteRtLmResponses* litert_lm_session_run_text_scoring(LiteRtLmSession* session,
+                                                      const char** target_text,
+                                                      size_t num_targets,
+                                                      bool store_token_lengths);
+
 // Generates content from the input prompt.
 //
 // @param session The session to use for generation.
@@ -317,6 +357,45 @@ int litert_lm_responses_get_num_candidates(const LiteRtLmResponses* responses);
 LITERT_LM_C_API_EXPORT
 const char* litert_lm_responses_get_response_text_at(
     const LiteRtLmResponses* responses, int index);
+
+// Returns whether the response contains a score at the given index.
+//
+// @param responses The responses object.
+// @param index The index of the response.
+// @return true if the score is available at the given index, false otherwise.
+LITERT_LM_C_API_EXPORT
+bool litert_lm_responses_has_score_at(const LiteRtLmResponses* responses,
+                                      int index);
+
+// Returns the score at a given index.
+//
+// @param responses The responses object.
+// @param index The index of the response.
+// @return The score. Returns 0.0f if index is out of bounds or no score is
+//   present.
+LITERT_LM_C_API_EXPORT
+float litert_lm_responses_get_score_at(const LiteRtLmResponses* responses,
+                                       int index);
+
+// Returns whether the response contains a token length at the given index.
+//
+// @param responses The responses object.
+// @param index The index of the response.
+// @return true if the token length is available at the given index, false
+//   otherwise.
+LITERT_LM_C_API_EXPORT
+bool litert_lm_responses_has_token_length_at(const LiteRtLmResponses* responses,
+                                             int index);
+
+// Returns the token length at a given index.
+//
+// @param responses The responses object.
+// @param index The index of the response.
+// @return The token length. Returns 0 if index is out of bounds or no token
+//   length is present.
+LITERT_LM_C_API_EXPORT
+int litert_lm_responses_get_token_length_at(const LiteRtLmResponses* responses,
+                                            int index);
 
 // Retrieves the benchmark information from the session. The caller is
 // responsible for destroying the benchmark info using

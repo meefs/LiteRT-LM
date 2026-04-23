@@ -1082,4 +1082,194 @@ TEST(EngineCTest, Benchmark) {
               0.0);
   }
 }
+
+TEST(EngineCTest, RunPrefillSuccess) {
+  const std::string task_path = GetTestdataPath(
+      "litert_lm/runtime/testdata/test_lm_new_metadata.task");
+
+  EngineSettingsPtr settings(
+      litert_lm_engine_settings_create(task_path.c_str(), "cpu",
+                                       /* vision_backend_str */ nullptr,
+                                       /* audio_backend_str */ nullptr),
+      &litert_lm_engine_settings_delete);
+  ASSERT_NE(settings, nullptr);
+  litert_lm_engine_settings_set_max_num_tokens(settings.get(), 16);
+
+  EnginePtr engine(litert_lm_engine_create(settings.get()),
+                   &litert_lm_engine_delete);
+  ASSERT_NE(engine, nullptr);
+
+  SessionPtr session(litert_lm_engine_create_session(
+                         engine.get(), /* session_config */ nullptr),
+                     &litert_lm_session_delete);
+  ASSERT_NE(session, nullptr);
+
+  const char* prompt = "Hello world!";
+  LiteRtLmInputData input_data;
+  input_data.type = kLiteRtLmInputDataTypeText;
+  input_data.data = prompt;
+  input_data.size = strlen(prompt);
+
+  int prefill_result =
+      litert_lm_session_run_prefill(session.get(), &input_data, 1);
+  EXPECT_EQ(prefill_result, 0);
+}
+
+TEST(EngineCTest, RunPrefillAndDecode) {
+  const std::string task_path = GetTestdataPath(
+      "litert_lm/runtime/testdata/test_lm_new_metadata.task");
+
+  EngineSettingsPtr settings(
+      litert_lm_engine_settings_create(task_path.c_str(), "cpu",
+                                       /* vision_backend_str */ nullptr,
+                                       /* audio_backend_str */ nullptr),
+      &litert_lm_engine_settings_delete);
+  ASSERT_NE(settings, nullptr);
+  litert_lm_engine_settings_set_max_num_tokens(settings.get(), 16);
+
+  EnginePtr engine(litert_lm_engine_create(settings.get()),
+                   &litert_lm_engine_delete);
+  ASSERT_NE(engine, nullptr);
+
+  SessionPtr session(litert_lm_engine_create_session(
+                         engine.get(), /* session_config */ nullptr),
+                     &litert_lm_session_delete);
+  ASSERT_NE(session, nullptr);
+
+  const char* prompt = "Hello world!";
+  LiteRtLmInputData input_data;
+  input_data.type = kLiteRtLmInputDataTypeText;
+  input_data.data = prompt;
+  input_data.size = strlen(prompt);
+
+  litert_lm_session_run_prefill(session.get(), &input_data, 1);
+
+  ResponsesPtr responses(litert_lm_session_run_decode(session.get()),
+                         &litert_lm_responses_delete);
+  ASSERT_NE(responses, nullptr);
+
+  EXPECT_EQ(litert_lm_responses_get_num_candidates(responses.get()), 1);
+  const char* response_text =
+      litert_lm_responses_get_response_text_at(responses.get(), 0);
+  ASSERT_NE(response_text, nullptr);
+  EXPECT_GT(strlen(response_text), 0);
+}
+
+TEST(EngineCTest, TextScoringBasic) {
+  const std::string task_path = GetTestdataPath(
+      "litert_lm/runtime/testdata/test_lm_new_metadata.task");
+
+  EngineSettingsPtr settings(
+      litert_lm_engine_settings_create(task_path.c_str(), "cpu",
+                                       /* vision_backend_str */ nullptr,
+                                       /* audio_backend_str */ nullptr),
+      &litert_lm_engine_settings_delete);
+  ASSERT_NE(settings, nullptr);
+  litert_lm_engine_settings_set_max_num_tokens(settings.get(), 16);
+
+  EnginePtr engine(litert_lm_engine_create(settings.get()),
+                   &litert_lm_engine_delete);
+  ASSERT_NE(engine, nullptr);
+
+  SessionPtr session(litert_lm_engine_create_session(
+                         engine.get(), /* session_config */ nullptr),
+                     &litert_lm_session_delete);
+  ASSERT_NE(session, nullptr);
+
+  const char* prompt = "Hello world!";
+  LiteRtLmInputData input_data;
+  input_data.type = kLiteRtLmInputDataTypeText;
+  input_data.data = prompt;
+  input_data.size = strlen(prompt);
+
+  litert_lm_session_run_prefill(session.get(), &input_data, 1);
+
+  const char* target_texts[] = {"apple"};
+  ResponsesPtr responses(
+      litert_lm_session_run_text_scoring(session.get(), target_texts, 1,
+                                         /*store_token_lengths=*/true),
+      &litert_lm_responses_delete);
+  ASSERT_NE(responses, nullptr);
+
+  EXPECT_EQ(litert_lm_responses_get_num_candidates(responses.get()), 1);
+}
+
+TEST(EngineCTest, TextScoringVerifyScores) {
+  const std::string task_path = GetTestdataPath(
+      "litert_lm/runtime/testdata/test_lm_new_metadata.task");
+
+  EngineSettingsPtr settings(
+      litert_lm_engine_settings_create(task_path.c_str(), "cpu",
+                                       /* vision_backend_str */ nullptr,
+                                       /* audio_backend_str */ nullptr),
+      &litert_lm_engine_settings_delete);
+  ASSERT_NE(settings, nullptr);
+  litert_lm_engine_settings_set_max_num_tokens(settings.get(), 16);
+
+  EnginePtr engine(litert_lm_engine_create(settings.get()),
+                   &litert_lm_engine_delete);
+  ASSERT_NE(engine, nullptr);
+
+  SessionPtr session(litert_lm_engine_create_session(
+                         engine.get(), /* session_config */ nullptr),
+                     &litert_lm_session_delete);
+  ASSERT_NE(session, nullptr);
+
+  const char* prompt = "Hello world!";
+  LiteRtLmInputData input_data;
+  input_data.type = kLiteRtLmInputDataTypeText;
+  input_data.data = prompt;
+  input_data.size = strlen(prompt);
+
+  litert_lm_session_run_prefill(session.get(), &input_data, 1);
+
+  const char* target_texts[] = {"apple"};
+  ResponsesPtr responses(
+      litert_lm_session_run_text_scoring(session.get(), target_texts, 1,
+                                         /*store_token_lengths=*/true),
+      &litert_lm_responses_delete);
+  ASSERT_NE(responses, nullptr);
+
+  EXPECT_TRUE(litert_lm_responses_has_score_at(responses.get(), 0));
+}
+
+TEST(EngineCTest, TextScoringVerifyTokenLengths) {
+  const std::string task_path = GetTestdataPath(
+      "litert_lm/runtime/testdata/test_lm_new_metadata.task");
+
+  EngineSettingsPtr settings(
+      litert_lm_engine_settings_create(task_path.c_str(), "cpu",
+                                       /* vision_backend_str */ nullptr,
+                                       /* audio_backend_str */ nullptr),
+      &litert_lm_engine_settings_delete);
+  ASSERT_NE(settings, nullptr);
+  litert_lm_engine_settings_set_max_num_tokens(settings.get(), 16);
+
+  EnginePtr engine(litert_lm_engine_create(settings.get()),
+                   &litert_lm_engine_delete);
+  ASSERT_NE(engine, nullptr);
+
+  SessionPtr session(litert_lm_engine_create_session(
+                         engine.get(), /* session_config */ nullptr),
+                     &litert_lm_session_delete);
+  ASSERT_NE(session, nullptr);
+
+  const char* prompt = "Hello world!";
+  LiteRtLmInputData input_data;
+  input_data.type = kLiteRtLmInputDataTypeText;
+  input_data.data = prompt;
+  input_data.size = strlen(prompt);
+
+  litert_lm_session_run_prefill(session.get(), &input_data, 1);
+
+  const char* target_texts[] = {"apple"};
+  ResponsesPtr responses(
+      litert_lm_session_run_text_scoring(session.get(), target_texts, 1,
+                                         /*store_token_lengths=*/true),
+      &litert_lm_responses_delete);
+  ASSERT_NE(responses, nullptr);
+
+  EXPECT_TRUE(litert_lm_responses_has_token_length_at(responses.get(), 0));
+  EXPECT_GT(litert_lm_responses_get_token_length_at(responses.get(), 0), 0);
+}
 }  // namespace

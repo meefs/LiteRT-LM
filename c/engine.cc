@@ -97,6 +97,35 @@ litert::lm::OptionalArgs CreateOptionalArgs(const char* extra_context) {
   return optional_args;
 }
 
+std::vector<litert::lm::InputData> ToEngineInputData(
+    const LiteRtLmInputData* inputs, size_t num_inputs) {
+  std::vector<litert::lm::InputData> engine_inputs;
+  engine_inputs.reserve(num_inputs);
+  for (size_t i = 0; i < num_inputs; ++i) {
+    switch (inputs[i].type) {
+      case kLiteRtLmInputDataTypeText:
+        engine_inputs.emplace_back(litert::lm::InputText(std::string(
+            static_cast<const char*>(inputs[i].data), inputs[i].size)));
+        break;
+      case kLiteRtLmInputDataTypeImage:
+        engine_inputs.emplace_back(litert::lm::InputImage(std::string(
+            static_cast<const char*>(inputs[i].data), inputs[i].size)));
+        break;
+      case kLiteRtLmInputDataTypeImageEnd:
+        engine_inputs.emplace_back(litert::lm::InputImageEnd());
+        break;
+      case kLiteRtLmInputDataTypeAudio:
+        engine_inputs.emplace_back(litert::lm::InputAudio(std::string(
+            static_cast<const char*>(inputs[i].data), inputs[i].size)));
+        break;
+      case kLiteRtLmInputDataTypeAudioEnd:
+        engine_inputs.emplace_back(litert::lm::InputAudioEnd());
+        break;
+    }
+  }
+  return engine_inputs;
+}
+
 }  // namespace
 
 using ::litert::lm::Conversation;
@@ -469,36 +498,68 @@ LiteRtLmSession* litert_lm_engine_create_session(
 
 void litert_lm_session_delete(LiteRtLmSession* session) { delete session; }
 
+LiteRtLmResponses* litert_lm_session_run_text_scoring(
+    LiteRtLmSession* session, const char** target_text, size_t num_targets,
+    bool store_token_lengths) {
+  if (!session || !session->session || !target_text || num_targets <= 0) {
+    return nullptr;
+  }
+  std::vector<absl::string_view> target_text_views;
+  target_text_views.reserve(num_targets);
+  for (size_t i = 0; i < num_targets; ++i) {
+    target_text_views.push_back(target_text[i]);
+  }
+  auto responses =
+      session->session->RunTextScoring(target_text_views, store_token_lengths);
+  if (!responses.ok()) {
+    ABSL_LOG(ERROR) << "Failed to run text scoring: " << responses.status();
+    return nullptr;
+  }
+  auto* c_responses = new LiteRtLmResponses{std::move(*responses)};
+  if (c_responses->responses.GetTexts().empty()) {
+    auto& mutable_texts = c_responses->responses.GetMutableTexts();
+    mutable_texts.reserve(num_targets);
+    for (size_t i = 0; i < num_targets; ++i) {
+      mutable_texts.emplace_back(target_text[i]);
+    }
+  }
+  return c_responses;
+}
+
+int litert_lm_session_run_prefill(LiteRtLmSession* session,
+                                  const LiteRtLmInputData* inputs,
+                                  size_t num_inputs) {
+  if (!session || !session->session || !inputs || num_inputs <= 0) {
+    return -1;
+  }
+  auto engine_inputs = ToEngineInputData(inputs, num_inputs);
+  auto status = session->session->RunPrefill(engine_inputs);
+  if (!status.ok()) {
+    ABSL_LOG(ERROR) << "Failed to run prefill: " << status;
+    return -1;
+  }
+  return 0;
+}
+
+LiteRtLmResponses* litert_lm_session_run_decode(LiteRtLmSession* session) {
+  if (!session || !session->session) {
+    return nullptr;
+  }
+  auto responses = session->session->RunDecode();
+  if (!responses.ok()) {
+    ABSL_LOG(ERROR) << "Failed to run decode: " << responses.status();
+    return nullptr;
+  }
+  return new LiteRtLmResponses{std::move(*responses)};
+}
+
 LiteRtLmResponses* litert_lm_session_generate_content(
     LiteRtLmSession* session, const LiteRtLmInputData* inputs,
     size_t num_inputs) {
   if (!session || !session->session) {
     return nullptr;
   }
-  std::vector<litert::lm::InputData> engine_inputs;
-  engine_inputs.reserve(num_inputs);
-  for (size_t i = 0; i < num_inputs; ++i) {
-    switch (inputs[i].type) {
-      case kLiteRtLmInputDataTypeText:
-        engine_inputs.emplace_back(InputText(std::string(
-            static_cast<const char*>(inputs[i].data), inputs[i].size)));
-        break;
-      case kLiteRtLmInputDataTypeImage:
-        engine_inputs.emplace_back(litert::lm::InputImage(std::string(
-            static_cast<const char*>(inputs[i].data), inputs[i].size)));
-        break;
-      case kLiteRtLmInputDataTypeImageEnd:
-        engine_inputs.emplace_back(litert::lm::InputImageEnd());
-        break;
-      case kLiteRtLmInputDataTypeAudio:
-        engine_inputs.emplace_back(litert::lm::InputAudio(std::string(
-            static_cast<const char*>(inputs[i].data), inputs[i].size)));
-        break;
-      case kLiteRtLmInputDataTypeAudioEnd:
-        engine_inputs.emplace_back(litert::lm::InputAudioEnd());
-        break;
-    }
-  }
+  auto engine_inputs = ToEngineInputData(inputs, num_inputs);
   auto responses = session->session->GenerateContent(std::move(engine_inputs));
   if (!responses.ok()) {
     ABSL_LOG(ERROR) << "Failed to generate content: " << responses.status();
@@ -517,30 +578,7 @@ int litert_lm_session_generate_content_stream(LiteRtLmSession* session,
   if (!session || !session->session) {
     return -1;
   }
-  std::vector<litert::lm::InputData> engine_inputs;
-  engine_inputs.reserve(num_inputs);
-  for (size_t i = 0; i < num_inputs; ++i) {
-    switch (inputs[i].type) {
-      case kLiteRtLmInputDataTypeText:
-        engine_inputs.emplace_back(litert::lm::InputText(std::string(
-            static_cast<const char*>(inputs[i].data), inputs[i].size)));
-        break;
-      case kLiteRtLmInputDataTypeImage:
-        engine_inputs.emplace_back(litert::lm::InputImage(std::string(
-            static_cast<const char*>(inputs[i].data), inputs[i].size)));
-        break;
-      case kLiteRtLmInputDataTypeImageEnd:
-        engine_inputs.emplace_back(litert::lm::InputImageEnd());
-        break;
-      case kLiteRtLmInputDataTypeAudio:
-        engine_inputs.emplace_back(litert::lm::InputAudio(std::string(
-            static_cast<const char*>(inputs[i].data), inputs[i].size)));
-        break;
-      case kLiteRtLmInputDataTypeAudioEnd:
-        engine_inputs.emplace_back(litert::lm::InputAudioEnd());
-        break;
-    }
-  }
+  auto engine_inputs = ToEngineInputData(inputs, num_inputs);
 
   absl::Status status = session->session->GenerateContentStream(
       std::move(engine_inputs), CreateCallback(callback, callback_data));
@@ -561,20 +599,60 @@ int litert_lm_responses_get_num_candidates(const LiteRtLmResponses* responses) {
   if (!responses) {
     return 0;
   }
-  return responses->responses.GetTexts().size();
+  const auto& r = responses->responses;
+  size_t num_candidates = r.GetTexts().size();
+  if (num_candidates == 0) {
+    num_candidates = r.GetScores().size();
+  }
+  if (num_candidates == 0 && r.GetTokenLengths().has_value()) {
+    num_candidates = r.GetTokenLengths()->size();
+  }
+  return static_cast<int>(num_candidates);
 }
 
 const char* litert_lm_responses_get_response_text_at(
     const LiteRtLmResponses* responses, int index) {
-  if (!responses) {
-    return nullptr;
-  }
-  if (index < 0 || index >= responses->responses.GetTexts().size()) {
+  if (!responses || index < 0 ||
+      index >= responses->responses.GetTexts().size()) {
     return nullptr;
   }
 
   // The string_view's data is valid as long as the responses object is alive.
   return responses->responses.GetTexts()[index].data();
+}
+
+bool litert_lm_responses_has_score_at(const LiteRtLmResponses* responses,
+                                      int index) {
+  if (!responses || index < 0 ||
+      index >= responses->responses.GetScores().size()) {
+    return false;
+  }
+  return true;
+}
+
+float litert_lm_responses_get_score_at(const LiteRtLmResponses* responses,
+                                       int index) {
+  if (!litert_lm_responses_has_score_at(responses, index)) {
+    return 0.0f;
+  }
+  return responses->responses.GetScores()[index];
+}
+
+bool litert_lm_responses_has_token_length_at(const LiteRtLmResponses* responses,
+                                             int index) {
+  if (!responses || !responses->responses.GetTokenLengths().has_value() ||
+      index < 0 || index >= responses->responses.GetTokenLengths()->size()) {
+    return false;
+  }
+  return true;
+}
+
+int litert_lm_responses_get_token_length_at(const LiteRtLmResponses* responses,
+                                            int index) {
+  if (!litert_lm_responses_has_token_length_at(responses, index)) {
+    return 0;
+  }
+  return (*responses->responses.GetTokenLengths())[index];
 }
 
 LiteRtLmBenchmarkInfo* litert_lm_session_get_benchmark_info(
