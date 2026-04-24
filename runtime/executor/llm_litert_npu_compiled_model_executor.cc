@@ -484,6 +484,28 @@ std::ostream& operator<<(
      << ((stats.decode_sampling_latency_us * 100) /
          (float)stats.decode_e2e_latency_us)
      << "%)";
+  if (stats.decode_mtp_rejection_sampling_latency_us > 0) {
+    os << "\n"
+       << "Total decode MTP rejection sampling latency [us]: "
+       << stats.decode_mtp_rejection_sampling_latency_us << " ("
+       << ((stats.decode_mtp_rejection_sampling_latency_us * 100) /
+           (float)stats.decode_e2e_latency_us)
+       << "%)";
+  }
+  if (stats.decode_mtp_activation_copy_latency_us > 0) {
+    os << "\n"
+       << "Total decode MTP activation copy latency [us]: "
+       << stats.decode_mtp_activation_copy_latency_us << " ("
+       << ((stats.decode_mtp_activation_copy_latency_us * 100) /
+           (float)stats.decode_e2e_latency_us)
+       << "%)";
+  }
+  os << "\n"
+     << "Total decode token queue latency [us]: "
+     << stats.decode_token_queue_latency_us << " ("
+     << ((stats.decode_token_queue_latency_us * 100) /
+         (float)stats.decode_e2e_latency_us)
+     << "%)";
 
   return os;
 }
@@ -1516,10 +1538,14 @@ LlmLiteRtNpuCompiledModelExecutor::Decode(
   }
 
   if (processed_tokens_.TokenCount() != current_step_) {
+    auto start_queue = absl::Now();
     LITERT_RETURN_IF_ERROR(processed_tokens_.RollBackToStep(current_step_));
+    latency_stats_.decode_token_queue_latency_us +=
+        absl::ToInt64Microseconds(absl::Now() - start_queue);
   }
 
   if (!pending_accepted_tokens_.empty()) {
+    auto start_queue = absl::Now();
     int next_token_id = pending_accepted_tokens_.front();
     pending_accepted_tokens_.erase(pending_accepted_tokens_.begin());
 
@@ -1530,8 +1556,11 @@ LlmLiteRtNpuCompiledModelExecutor::Decode(
     std::shared_ptr<TokenData> next_token =
         std::make_shared<TokenData>(next_token_id);
     if (UseEmbeddingLookupManager()) {
+      auto start_lookup = absl::Now();
       RETURN_IF_ERROR(embedding_lookup_manager_->LookupDecode(
           next_token->id(), next_token->mutable_embedding()));
+      latency_stats_.decode_embedder_inference_latency_us +=
+          absl::ToInt64Microseconds(absl::Now() - start_lookup);
     }
     // We must add it as a pending input token so that the NEXT Decode call
     // can find it via GetNextUnprocessedToken if the queue is empty.
@@ -1542,6 +1571,8 @@ LlmLiteRtNpuCompiledModelExecutor::Decode(
     RETURN_IF_ERROR(
         processed_tokens_.AddPendingInputToken({std::move(next_token)}));
     current_step_++;
+    latency_stats_.decode_token_queue_latency_us +=
+        absl::ToInt64Microseconds(absl::Now() - start_queue);
 
     latency_stats_.decode_e2e_latency_us +=
         absl::ToInt64Microseconds(absl::Now() - start);
@@ -1549,8 +1580,12 @@ LlmLiteRtNpuCompiledModelExecutor::Decode(
     return std::vector<std::vector<int>>{{next_token_id}};
   }
   // No tokens in queue, run a full Speculative or Normal Decode cycle.
+  auto start_get_token = absl::Now();
   auto [internal_start_step, pending_input_token] =
       processed_tokens_.GetNextUnprocessedToken();
+  latency_stats_.decode_token_queue_latency_us +=
+      absl::ToInt64Microseconds(absl::Now() - start_get_token);
+
   if (pending_input_token.empty()) {
     return absl::InvalidArgumentError("No id available to be decoded.");
   }
@@ -1563,15 +1598,22 @@ LlmLiteRtNpuCompiledModelExecutor::Decode(
                            << ": Running Main Decode Signature";
     RETURN_IF_ERROR(
         DecodeInternal(internal_start_step, pending_input_token[0]));
+
+    auto start_mark = absl::Now();
     RETURN_IF_ERROR(processed_tokens_.MarkPendingInputTokenAsProcessed());
+    latency_stats_.decode_token_queue_latency_us +=
+        absl::ToInt64Microseconds(absl::Now() - start_mark);
 
     // Sample the output of the main decode to get the 'good' token for MTP.
+    auto start_sample = absl::Now();
     LITERT_ASSIGN_OR_RETURN(
         mtp_start_token_id,
         ApplyGreedySampling(
             llm_inference_context_
                 .decode_output_buffers[LlmSignatures::kDecodeLogitsOutput],
             kUseNeonSamplingIfAvailable));
+    latency_stats_.decode_sampling_latency_us +=
+        absl::ToInt64Microseconds(absl::Now() - start_sample);
 
     // The MTP drafter starts from the position of the token we just
     // generated.
@@ -1591,8 +1633,6 @@ LlmLiteRtNpuCompiledModelExecutor::Decode(
              last_verify_activations_.data(), last_verify_activations_.size());
     }
     RETURN_IF_ERROR(processed_tokens_.MarkPendingInputTokenAsProcessed());
-    // mtp_start_step and mtp_start_token_id are already correct from
-    // internal_start_step.
   }
 
   if (speculative_decoding_type_ == SpeculativeDecodingType::kMTP) {
@@ -1610,12 +1650,15 @@ LlmLiteRtNpuCompiledModelExecutor::Decode(
     latency_stats_.decode_llm_inference_latency_us +=
         absl::ToInt64Microseconds(absl::Now() - start_verify);
 
+    auto start_rs = absl::Now();
     LITERT_ASSIGN_OR_RETURN(
         auto rs_result,
         PerformRejectionSampling(
             draft_tokens,
             llm_inference_context_
                 .verify_output_buffers[LlmSignatures::kVerifyLogitsOutput]));
+    latency_stats_.decode_mtp_rejection_sampling_latency_us +=
+        absl::ToInt64Microseconds(absl::Now() - start_rs);
 
     NPU_EXECUTOR_LOG(INFO) << "  MTP Accepted " << rs_result.num_accepted
                            << " draft tokens. Bonus: "
@@ -1639,6 +1682,7 @@ LlmLiteRtNpuCompiledModelExecutor::Decode(
 
     // Prepare next activation slice.
     {
+      auto start_act_copy = absl::Now();
       const auto& verify_activations_buffer =
           llm_inference_context_.verify_output_buffers
               [LlmSignatures::kLastLayerActivationsOutput];
@@ -1655,6 +1699,8 @@ LlmLiteRtNpuCompiledModelExecutor::Decode(
                  rs_result.num_accepted * hidden_size_in_bytes,
              hidden_size_in_bytes);
       has_valid_verify_activations_ = true;
+      latency_stats_.decode_mtp_activation_copy_latency_us +=
+          absl::ToInt64Microseconds(absl::Now() - start_act_copy);
     }
 
     // Return the first token now, queue the rest for future Decode() calls.
@@ -1671,8 +1717,11 @@ LlmLiteRtNpuCompiledModelExecutor::Decode(
     std::shared_ptr<TokenData> first_token =
         std::make_shared<TokenData>(first_token_id);
     if (UseEmbeddingLookupManager()) {
+      auto start_lookup = absl::Now();
       RETURN_IF_ERROR(embedding_lookup_manager_->LookupDecode(
           first_token->id(), first_token->mutable_embedding()));
+      latency_stats_.decode_embedder_inference_latency_us +=
+          absl::ToInt64Microseconds(absl::Now() - start_lookup);
     }
     // For MTP, we need to mark them as processed so the next step's
     // GetNextUnprocessedToken works correctly.
@@ -1703,16 +1752,23 @@ LlmLiteRtNpuCompiledModelExecutor::Decode(
         std::make_shared<TokenData>(max_index);
 
     if (UseEmbeddingLookupManager()) {
+      auto start_lookup = absl::Now();
       RETURN_IF_ERROR(embedding_lookup_manager_->LookupDecode(
           last_output_token->id(), last_output_token->mutable_embedding()));
+      latency_stats_.decode_embedder_inference_latency_us +=
+          absl::ToInt64Microseconds(absl::Now() - start_lookup);
     }
     // For Gemma3 we don't need to do anything here because we invoke
     // the Embedder before invoking the transformer during prefill/decode. All
     // we need to do is keep the token id around (which is stored as the pending
     // token).
 
+    auto start_add = absl::Now();
     RETURN_IF_ERROR(
         processed_tokens_.AddPendingInputToken({std::move(last_output_token)}));
+    latency_stats_.decode_token_queue_latency_us +=
+        absl::ToInt64Microseconds(absl::Now() - start_add);
+
     ++current_step_;
 
     latency_stats_.decode_e2e_latency_us +=
