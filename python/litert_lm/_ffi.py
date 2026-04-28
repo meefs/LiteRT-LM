@@ -174,8 +174,10 @@ def _setup_lib_signatures(lib):
       ctypes.c_void_p,
       ctypes.c_int,
   ]
-  # Split: lib.litert_lm_session_config_set_apply_prompt_template.argtypes = [
-  #     ctypes.c_void_p, ctypes.c_bool]
+  lib.litert_lm_session_config_set_apply_prompt_template.argtypes = [
+      ctypes.c_void_p,
+      ctypes.c_bool,
+  ]
   lib.litert_lm_session_config_set_sampler_params.argtypes = [
       ctypes.c_void_p,
       ctypes.POINTER(LiteRtLmSamplerParams),

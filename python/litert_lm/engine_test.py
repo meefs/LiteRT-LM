@@ -16,13 +16,14 @@ import pathlib
 
 from absl import flags
 from absl.testing import absltest
+from absl.testing import parameterized
 
 import litert_lm
 
 FLAGS = flags.FLAGS
 
 
-class LiteRtLmTestBase(absltest.TestCase):
+class LiteRtLmTestBase(parameterized.TestCase):
 
   @classmethod
   def setUpClass(cls):
@@ -373,6 +374,14 @@ class EngineTest(LiteRtLmTestBase):
       self.assertNotEmpty(responses)
       # We expect fewer responses than a full decode (which is 6 chunks).
       self.assertLess(len(responses), 6)
+
+  @parameterized.parameters(True, False)
+  def test_session_api_apply_prompt_template(self, apply_prompt_template):
+    with self._create_engine() as engine:
+      with engine.create_session(
+          apply_prompt_template=apply_prompt_template
+      ) as session:
+        self.assertIsNotNone(session)
 
 
 class FunctionCallingTest(LiteRtLmTestBase):
