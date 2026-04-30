@@ -1996,6 +1996,58 @@ TEST_P(ConversationTest, CancelGroupWithSendMessageAsync) {
   conversation->CancelGroup("group1");
 }
 
+TEST_P(ConversationTest, CancelProcessDuringSendMessageAsync) {
+  // Set up mock Session.
+  auto mock_session = CreateMockSession();
+  MockSession* mock_session_ptr = mock_session.get();
+  auto mock_engine = CreateMockEngine(std::move(mock_session));
+
+  // Create Conversation.
+  ASSERT_OK_AND_ASSIGN(
+      auto conversation_config,
+      ConversationConfig::Builder()
+          .SetSessionConfig(session_config_)
+          .SetOverwritePromptTemplate(PromptTemplate(kTestJinjaPromptTemplate))
+          .Build(*mock_engine));
+  ASSERT_OK_AND_ASSIGN(auto conversation,
+                       Conversation::Create(*mock_engine, conversation_config));
+
+  Message user_message = {{"role", "user"}, {"content", "How are you?"}};
+
+  absl::Notification done;
+  absl::Status status;
+  absl::AnyInvocable<void(absl::StatusOr<Responses>)> stored_callback;
+
+  // Expect RunPrefillAsync to be called.
+  EXPECT_CALL(*mock_session_ptr, RunPrefillAsync(testing::_, testing::_))
+      .WillOnce([&](const std::vector<InputData>& contents,
+                    absl::AnyInvocable<void(absl::StatusOr<Responses>)>
+                        user_callback) {
+        stored_callback = std::move(user_callback);
+        return nullptr;
+      });
+
+  EXPECT_OK(conversation->SendMessageAsync(
+      user_message, [&](absl::StatusOr<Message> message) {
+        if (!message.ok()) {
+          status = message.status();
+          done.Notify();
+        }
+      }));
+
+  // Expect CancelProcess to be called on the mock session.
+  EXPECT_CALL(*mock_session_ptr, CancelProcess()).WillOnce([&]() {
+    if (stored_callback) {
+      stored_callback(Responses(TaskState::kCancelled));
+    }
+  });
+
+  conversation->CancelProcess();
+
+  done.WaitForNotification();
+  EXPECT_THAT(status, testing::status::StatusIs(absl::StatusCode::kCancelled));
+}
+
 TEST_P(ConversationTest, CancelGroupWithRunTextScoringAsync) {
   // Set up mock Session.
   auto mock_session = CreateMockSession();
